@@ -1,9 +1,7 @@
 import { RAPIER, type RapierPhysicsWorld } from '../../../engine/physics/rapierWorld';
 import { makePlanetFrame, trackDistanceToLongitude } from '../../../engine/planetPlacement';
 import { TRACK_LANE_SPACING_METERS, TRACK_START_LONGITUDE_DEGREES } from '../constants';
-import { createRampSegmentGeometry } from '../rampGeometry';
-import { createRampSegmentPlacement } from '../rampPlacement';
-import { RAMP_CONFIG, getRampSegmentSpans } from '../rampConfig';
+import { RAMP_CONFIG, getRampLongitudeDeg } from '../rampConfig';
 
 export function createWorldPropColliders(rapier: RapierPhysicsWorld, planetRadius: number): Set<number> {
   const blockingColliders = new Set<number>();
@@ -33,24 +31,39 @@ function createBleacherCollider(rapier: RapierPhysicsWorld, planetRadius: number
 }
 
 function createRampColliders(rapier: RapierPhysicsWorld, planetRadius: number): void {
-  for (const span of getRampSegmentSpans()) {
-    const geometry = createRampSegmentGeometry(RAMP_CONFIG.width, span.endDistance - span.startDistance, span.startHeight, span.endHeight);
-    const placement = createRampSegmentPlacement(planetRadius, span.centerDistance);
-    const body = rapier.world.createRigidBody(
-      RAPIER.RigidBodyDesc.fixed()
-        .setTranslation(placement.position.x, placement.position.y, placement.position.z)
-        .setRotation({
-          x: placement.quaternion.x,
-          y: placement.quaternion.y,
-          z: placement.quaternion.z,
-          w: placement.quaternion.w,
-        }),
-    );
-    const positions = geometry.getAttribute('position').array as Float32Array;
-    const indices = Uint32Array.from((geometry.getIndex()?.array ?? []) as ArrayLike<number>);
-    rapier.world.createCollider(
-      RAPIER.ColliderDesc.trimesh(positions, indices).setFriction(0.92).setRestitution(0.04),
-      body,
-    );
-  }
+  const frame = makePlanetFrame({
+    planetRadius,
+    longitudeDeg: getRampLongitudeDeg(),
+    radialOffset: RAMP_CONFIG.radialOffset,
+    altitude: 0,
+    headingDeg: RAMP_CONFIG.headingDeg,
+  });
+  const fullLength = RAMP_CONFIG.rampLength * 2 + RAMP_CONFIG.topLength;
+  const upCenter = frame.position
+    .clone()
+    .addScaledVector(frame.localUp, RAMP_CONFIG.height / 2)
+    .addScaledVector(frame.localForward, -fullLength / 2 + RAMP_CONFIG.rampLength / 2);
+  const topCenter = frame.position.clone().addScaledVector(frame.localUp, RAMP_CONFIG.height);
+  const downCenter = frame.position
+    .clone()
+    .addScaledVector(frame.localUp, RAMP_CONFIG.height / 2)
+    .addScaledVector(frame.localForward, fullLength / 2 - RAMP_CONFIG.rampLength / 2);
+
+  createRampBlock(rapier, upCenter, frame.quaternion, RAMP_CONFIG.rampLength);
+  createRampBlock(rapier, topCenter, frame.quaternion, RAMP_CONFIG.topLength);
+  createRampBlock(rapier, downCenter, frame.quaternion, RAMP_CONFIG.rampLength);
+}
+
+function createRampBlock(
+  rapier: RapierPhysicsWorld,
+  center: { x: number; y: number; z: number },
+  baseRotation: { x: number; y: number; z: number; w: number },
+  length: number,
+): void {
+  const body = rapier.world.createRigidBody(
+    RAPIER.RigidBodyDesc.fixed()
+      .setTranslation(center.x, center.y, center.z)
+      .setRotation(baseRotation),
+  );
+  rapier.world.createCollider(RAPIER.ColliderDesc.cuboid(RAMP_CONFIG.width / 2, 0.12, length / 2).setFriction(0.9), body);
 }

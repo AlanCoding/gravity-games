@@ -13,7 +13,7 @@ export function createRampBaseFrame(planetRadius: number): PlanetFrame {
     planetRadius,
     longitudeDeg: getRampLongitudeDeg(),
     radialOffset: RAMP_CONFIG.radialOffset,
-    altitude: RAMP_CONFIG.surfaceLift,
+    altitude: 0.08,
     headingDeg: RAMP_CONFIG.headingDeg,
   });
 }

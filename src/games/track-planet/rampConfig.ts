@@ -2,22 +2,12 @@ import { latitudeOffsetToDegrees } from '../../engine/planetPlacement';
 
 export const RAMP_CONFIG = {
   longitudeDeg: 38,
-  radialOffset: 9.6,
-  headingDeg: 0,
-  width: 30,
-  rampLength: 25,
-  topLength: 15,
-  height: 9,
-  segmentLength: 5,
-  surfaceLift: 0.08,
-};
-
-export type RampSegmentSpan = {
-  startDistance: number;
-  endDistance: number;
-  centerDistance: number;
-  startHeight: number;
-  endHeight: number;
+  radialOffset: 8,
+  headingDeg: 90,
+  width: 6,
+  rampLength: 5,
+  topLength: 3,
+  height: 1.8,
 };
 
 export function getRampTotalLength(): number {
@@ -54,23 +44,4 @@ export function getRampCenterHeadingDeg(): number {
 
 export function getRampLatitudeDeg(distance: number, planetRadius: number): number {
   return getRampLatitudeDegAtDistance(planetRadius, distance);
-}
-
-export function getRampSegmentSpans(): RampSegmentSpan[] {
-  const totalLength = getRampTotalLength();
-  const segmentCount = Math.ceil(totalLength / RAMP_CONFIG.segmentLength);
-  const halfLength = totalLength / 2;
-
-  return Array.from({ length: segmentCount }, (_, index) => {
-    const startDistance = -halfLength + index * RAMP_CONFIG.segmentLength;
-    const endDistance = Math.min(startDistance + RAMP_CONFIG.segmentLength, halfLength);
-    const centerDistance = (startDistance + endDistance) / 2;
-    return {
-      startDistance,
-      endDistance,
-      centerDistance,
-      startHeight: getRampHeightAtDistance(startDistance),
-      endHeight: getRampHeightAtDistance(endDistance),
-    };
-  });
 }

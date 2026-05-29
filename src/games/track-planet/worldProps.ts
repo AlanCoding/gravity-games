@@ -6,9 +6,7 @@ import {
   trackDistanceToLongitude,
 } from '../../engine/planetPlacement';
 import { TRACK_LANE_SPACING_METERS, TRACK_START_LONGITUDE_DEGREES } from './constants';
-import { createRampSegmentGeometry } from './rampGeometry';
-import { createRampSegmentPlacement } from './rampPlacement';
-import { RAMP_CONFIG, getRampSegmentSpans } from './rampConfig';
+import { RAMP_CONFIG, getRampLongitudeDeg } from './rampConfig';
 
 export function addWorldProps(scene: THREE.Scene, planetRadius: number): THREE.Object3D {
   addStartingBleachers(scene, planetRadius);
@@ -30,20 +28,69 @@ export function addWorldProps(scene: THREE.Scene, planetRadius: number): THREE.O
 }
 
 function addRamp(scene: THREE.Scene, planetRadius: number): void {
+  const group = createPlacedGroup({
+    planetRadius,
+    longitudeDeg: getRampLongitudeDeg(),
+    radialOffset: RAMP_CONFIG.radialOffset,
+    altitude: 0.08,
+    headingDeg: RAMP_CONFIG.headingDeg,
+  });
   const rampMaterial = new THREE.MeshStandardMaterial({
     color: 0x78846f,
     emissive: 0x151a12,
     roughness: 0.72,
     side: THREE.DoubleSide,
   });
-  for (const span of getRampSegmentSpans()) {
-    const geometry = createRampSegmentGeometry(RAMP_CONFIG.width, span.endDistance - span.startDistance, span.startHeight, span.endHeight);
-    const segment = new THREE.Mesh(geometry, rampMaterial);
-    const placement = createRampSegmentPlacement(planetRadius, span.centerDistance);
-    segment.position.copy(placement.position);
-    segment.quaternion.copy(placement.quaternion);
-    scene.add(segment);
-  }
+  const deckMaterial = new THREE.MeshStandardMaterial({ color: 0x98a58d, emissive: 0x171d14, roughness: 0.68 });
+  const fullLength = RAMP_CONFIG.rampLength * 2 + RAMP_CONFIG.topLength;
+
+  const upRamp = createRampSegment(RAMP_CONFIG.width, RAMP_CONFIG.rampLength, RAMP_CONFIG.height, rampMaterial, 1);
+  upRamp.position.z = -fullLength / 2 + RAMP_CONFIG.rampLength / 2;
+  group.add(upRamp);
+
+  const top = new THREE.Mesh(
+    new THREE.BoxGeometry(RAMP_CONFIG.width, 0.22, RAMP_CONFIG.topLength),
+    deckMaterial,
+  );
+  top.position.set(0, RAMP_CONFIG.height, 0);
+  group.add(top);
+
+  const downRamp = createRampSegment(RAMP_CONFIG.width, RAMP_CONFIG.rampLength, RAMP_CONFIG.height, rampMaterial, -1);
+  downRamp.position.z = fullLength / 2 - RAMP_CONFIG.rampLength / 2;
+  group.add(downRamp);
+
+  scene.add(group);
+}
+
+function createRampSegment(
+  width: number,
+  length: number,
+  height: number,
+  material: THREE.Material,
+  slopeDirection: 1 | -1,
+): THREE.Mesh {
+  const halfWidth = width / 2;
+  const halfLength = length / 2;
+  const lowZ = slopeDirection === 1 ? -halfLength : halfLength;
+  const highZ = slopeDirection === 1 ? halfLength : -halfLength;
+  const geometry = new THREE.BufferGeometry();
+  geometry.setFromPoints([
+    new THREE.Vector3(-halfWidth, 0, lowZ),
+    new THREE.Vector3(halfWidth, 0, lowZ),
+    new THREE.Vector3(-halfWidth, height, highZ),
+    new THREE.Vector3(halfWidth, height, highZ),
+    new THREE.Vector3(-halfWidth, 0, highZ),
+    new THREE.Vector3(halfWidth, 0, highZ),
+  ]);
+  geometry.setIndex([
+    0, 1, 2, 1, 3, 2,
+    2, 3, 4, 3, 5, 4,
+    0, 2, 4, 0, 4, 1,
+    1, 4, 5, 1, 5, 3,
+    0, 4, 2, 1, 3, 5,
+  ]);
+  geometry.computeVertexNormals();
+  return new THREE.Mesh(geometry, material);
 }
 
 function createRotatingObject(): THREE.Object3D {
