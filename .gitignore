@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+.env.*
+
+.vite/
+.cache/
+.DS_Store
+Thumbs.db
+
+.idea/
+.vscode/
+*.swp
+*.swo
