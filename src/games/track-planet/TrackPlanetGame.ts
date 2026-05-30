@@ -28,9 +28,10 @@ export type TrackPlanetGameOptions = {
   container: HTMLElement;
   velocityDisplay: HTMLElement | null;
   orbitalDisplay: HTMLElement | null;
-  escapeDisplay: HTMLElement | null;
   throwChargeDisplay: HTMLElement | null;
-  coordinateDisplay: HTMLElement | null;
+  longitudeDisplay: HTMLElement | null;
+  latitudeDisplay: HTMLElement | null;
+  altitudeDisplay: HTMLElement | null;
   throwDisplay: HTMLElement | null;
   achievements?: AchievementHooks;
 };
@@ -39,9 +40,10 @@ export class TrackPlanetGame {
   private readonly container: HTMLElement;
   private readonly velocityDisplay: HTMLElement | null;
   private readonly orbitalDisplay: HTMLElement | null;
-  private readonly escapeDisplay: HTMLElement | null;
   private readonly throwChargeDisplay: HTMLElement | null;
-  private readonly coordinateDisplay: HTMLElement | null;
+  private readonly longitudeDisplay: HTMLElement | null;
+  private readonly latitudeDisplay: HTMLElement | null;
+  private readonly altitudeDisplay: HTMLElement | null;
   private readonly throwDisplay: HTMLElement | null;
   private readonly achievements: AchievementHooks;
   private readonly input = new InputController();
@@ -75,9 +77,10 @@ export class TrackPlanetGame {
     this.container = options.container;
     this.velocityDisplay = options.velocityDisplay;
     this.orbitalDisplay = options.orbitalDisplay;
-    this.escapeDisplay = options.escapeDisplay;
     this.throwChargeDisplay = options.throwChargeDisplay;
-    this.coordinateDisplay = options.coordinateDisplay;
+    this.longitudeDisplay = options.longitudeDisplay;
+    this.latitudeDisplay = options.latitudeDisplay;
+    this.altitudeDisplay = options.altitudeDisplay;
     this.throwDisplay = options.throwDisplay;
     this.achievements = options.achievements ?? {};
     this.world = createTrackPlanetScene(this.container, PLANET_RADIUS_METERS, PLAYER_HEIGHT_METERS);
@@ -371,12 +374,15 @@ export class TrackPlanetGame {
     if (this.orbitalDisplay) {
       this.orbitalDisplay.textContent = `orbital ${snapshot.orbitalSpeed.toFixed(1)} m/s`;
     }
-    if (this.escapeDisplay) {
-      this.escapeDisplay.textContent = `escape ${snapshot.escapeSpeed.toFixed(1)} m/s`;
+    const coordinates = this.getPlanetCoordinates(snapshot);
+    if (this.longitudeDisplay) {
+      this.longitudeDisplay.textContent = `lon ${coordinates.longitude.toFixed(1)}`;
     }
-    if (this.coordinateDisplay) {
-      const coordinates = this.getPlanetCoordinates(snapshot);
-      this.coordinateDisplay.textContent = `lon ${coordinates.longitude.toFixed(1)} lat ${coordinates.latitude.toFixed(1)} alt ${coordinates.altitude.toFixed(1)} m`;
+    if (this.latitudeDisplay) {
+      this.latitudeDisplay.textContent = `lat ${coordinates.latitude.toFixed(1)}`;
+    }
+    if (this.altitudeDisplay) {
+      this.altitudeDisplay.textContent = `alt ${coordinates.altitude.toFixed(1)} m`;
     }
   }
 

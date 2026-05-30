@@ -37,9 +37,10 @@ function startTrackPlanet(): void {
     container,
     velocityDisplay: document.querySelector<HTMLElement>('#velocityDisplay'),
     orbitalDisplay: document.querySelector<HTMLElement>('#orbitalDisplay'),
-    escapeDisplay: document.querySelector<HTMLElement>('#escapeDisplay'),
     throwChargeDisplay: document.querySelector<HTMLElement>('#throwChargeDisplay'),
-    coordinateDisplay: document.querySelector<HTMLElement>('#coordinateDisplay'),
+    longitudeDisplay: document.querySelector<HTMLElement>('#longitudeDisplay'),
+    latitudeDisplay: document.querySelector<HTMLElement>('#latitudeDisplay'),
+    altitudeDisplay: document.querySelector<HTMLElement>('#altitudeDisplay'),
     throwDisplay: document.querySelector<HTMLElement>('#throwDisplay'),
   });
   currentGame.start();
@@ -79,9 +80,7 @@ function renderTrackPlanet(): void {
   stopCurrentGame();
   appElement.innerHTML = `
     <section class="game-page">
-      <div class="banner-toolbar">
-        <button class="banner-toggle" id="bannerToggle" type="button" aria-expanded="true">Minimize banner</button>
-      </div>
+      <button class="banner-toggle" id="bannerToggle" type="button" aria-expanded="true">Minimize banner</button>
       <header class="game-banner">
         <div class="game-banner-art" aria-hidden="true" style="--banner-image: url('${trackPlanetBannerUrl}')"></div>
         <div class="game-banner-copy">
@@ -93,9 +92,10 @@ function renderTrackPlanet(): void {
           <div class="readout" aria-live="polite">
             <span id="velocityDisplay">0.0 m/s</span>
             <span id="orbitalDisplay">orbital 0.0 m/s</span>
-            <span id="escapeDisplay">escape 0.0 m/s</span>
             <span id="throwChargeDisplay">throw charge 0%</span>
-            <span id="coordinateDisplay">lon 0.0 lat 0.0 alt 0.0 m</span>
+            <span id="longitudeDisplay">lon 0.0</span>
+            <span id="latitudeDisplay">lat 0.0</span>
+            <span id="altitudeDisplay">alt 0.0 m</span>
           </div>
         </div>
       </header>

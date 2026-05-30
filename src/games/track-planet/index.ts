@@ -9,9 +9,10 @@ export const trackPlanetGame = {
     container: HTMLElement;
     velocityDisplay: HTMLElement | null;
     orbitalDisplay: HTMLElement | null;
-    escapeDisplay: HTMLElement | null;
     throwChargeDisplay: HTMLElement | null;
-    coordinateDisplay: HTMLElement | null;
+    longitudeDisplay: HTMLElement | null;
+    latitudeDisplay: HTMLElement | null;
+    altitudeDisplay: HTMLElement | null;
     throwDisplay: HTMLElement | null;
   }): TrackPlanetGame =>
     new TrackPlanetGame({

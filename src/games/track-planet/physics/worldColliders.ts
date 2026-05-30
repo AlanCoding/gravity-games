@@ -17,7 +17,7 @@ function createBleacherCollider(rapier: RapierPhysicsWorld, planetRadius: number
   const frame = makePlanetFrame({
     planetRadius,
     longitudeDeg: TRACK_START_LONGITUDE_DEGREES - trackDistanceToLongitude(3, planetRadius),
-    radialOffset: outsideTrackOffset,
+    radialOffset: -outsideTrackOffset,
     altitude: 0.12,
     headingDeg: 180,
   });
