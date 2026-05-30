@@ -10,6 +10,7 @@ export const trackPlanetGame = {
     velocityDisplay: HTMLElement | null;
     orbitalDisplay: HTMLElement | null;
     escapeDisplay: HTMLElement | null;
+    throwChargeDisplay: HTMLElement | null;
     coordinateDisplay: HTMLElement | null;
     throwDisplay: HTMLElement | null;
   }): TrackPlanetGame =>

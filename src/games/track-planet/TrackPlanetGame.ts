@@ -29,6 +29,7 @@ export type TrackPlanetGameOptions = {
   velocityDisplay: HTMLElement | null;
   orbitalDisplay: HTMLElement | null;
   escapeDisplay: HTMLElement | null;
+  throwChargeDisplay: HTMLElement | null;
   coordinateDisplay: HTMLElement | null;
   throwDisplay: HTMLElement | null;
   achievements?: AchievementHooks;
@@ -39,6 +40,7 @@ export class TrackPlanetGame {
   private readonly velocityDisplay: HTMLElement | null;
   private readonly orbitalDisplay: HTMLElement | null;
   private readonly escapeDisplay: HTMLElement | null;
+  private readonly throwChargeDisplay: HTMLElement | null;
   private readonly coordinateDisplay: HTMLElement | null;
   private readonly throwDisplay: HTMLElement | null;
   private readonly achievements: AchievementHooks;
@@ -49,7 +51,8 @@ export class TrackPlanetGame {
   private playerPhysics: PlayerPhysics | null = null;
   private planetCollider: RAPIER.Collider | null = null;
   private blockingColliderHandles = new Set<number>();
-  private shotPut: ShotPut | null = null;
+  private readonly shotPuts: ShotPut[] = [];
+  private latestShotPut: ShotPut | null = null;
   private pole: Pole | null = null;
   private heading = TRACK_START_FORWARD.clone();
   private cameraPitch = 0.24;
@@ -73,6 +76,7 @@ export class TrackPlanetGame {
     this.velocityDisplay = options.velocityDisplay;
     this.orbitalDisplay = options.orbitalDisplay;
     this.escapeDisplay = options.escapeDisplay;
+    this.throwChargeDisplay = options.throwChargeDisplay;
     this.coordinateDisplay = options.coordinateDisplay;
     this.throwDisplay = options.throwDisplay;
     this.achievements = options.achievements ?? {};
@@ -104,6 +108,8 @@ export class TrackPlanetGame {
     this.updatePlayerShadow(snapshot);
     this.updateCamera(snapshot, true);
     this.updateReadout(snapshot);
+    this.updateThrowChargeReadout();
+    this.updateThrowReadout();
     this.container.focus();
     this.animationHandle = window.requestAnimationFrame(() => this.frame());
   }
@@ -141,7 +147,9 @@ export class TrackPlanetGame {
         desiredTangentVelocity,
         jumpRequested,
       });
-      this.shotPut?.physics.beforePhysicsStep();
+      for (const shotPut of this.shotPuts) {
+        shotPut.physics.beforePhysicsStep();
+      }
       this.applyPoleGravity();
     });
     this.handleCollisionEvents();
@@ -158,10 +166,13 @@ export class TrackPlanetGame {
 
     this.updatePlayer(snapshot);
     this.updatePlayerShadow(snapshot);
-    this.shotPut?.updateFromPhysics();
+    for (const shotPut of this.shotPuts) {
+      shotPut.updateFromPhysics();
+    }
     this.pole?.updateFromPhysics();
     this.updateCamera(snapshot);
     this.updateReadout(snapshot);
+    this.updateThrowChargeReadout();
     this.updateThrowReadout();
     this.checkThrowHooks(snapshot);
     this.checkAchievementHooks(snapshot);
@@ -207,7 +218,7 @@ export class TrackPlanetGame {
       .addScaledVector(snapshot.radialUp, 1.2)
       .addScaledVector(forward, 1.4);
     const releaseVelocity = snapshot.velocity.clone().addScaledVector(forward, speed).addScaledVector(snapshot.radialUp, speed * 0.38);
-    this.shotPut = new ShotPut({
+    const shotPut = new ShotPut({
       scene: this.world.scene,
       rapier: this.rapier,
       position: releasePosition,
@@ -216,6 +227,8 @@ export class TrackPlanetGame {
       surfaceGravity: SURFACE_GRAVITY,
       startTime: this.elapsed,
     });
+    this.shotPuts.push(shotPut);
+    this.latestShotPut = shotPut;
     this.firstThrowFired = true;
   }
 
@@ -248,19 +261,21 @@ export class TrackPlanetGame {
   }
 
   private handleCollisionEvents(): void {
-    if (!this.rapier || !this.planetCollider || !this.shotPut) {
+    if (!this.rapier || !this.planetCollider || !this.shotPuts.length) {
       return;
     }
-    const shotCollider = this.shotPut.physics.collider;
     for (const event of this.rapier.getCollisionEvents()) {
       if (!event.started) {
         continue;
       }
-      const hitPlanet =
-        (event.colliderA === shotCollider.handle && event.colliderB === this.planetCollider.handle) ||
-        (event.colliderB === shotCollider.handle && event.colliderA === this.planetCollider.handle);
-      if (hitPlanet) {
-        this.shotPut.physics.bounceCount += 1;
+      for (const shotPut of this.shotPuts) {
+        const shotCollider = shotPut.physics.collider;
+        const hitPlanet =
+          (event.colliderA === shotCollider.handle && event.colliderB === this.planetCollider.handle) ||
+          (event.colliderB === shotCollider.handle && event.colliderA === this.planetCollider.handle);
+        if (hitPlanet) {
+          shotPut.physics.bounceCount += 1;
+        }
       }
     }
   }
@@ -369,12 +384,20 @@ export class TrackPlanetGame {
     if (!this.throwDisplay) {
       return;
     }
-    if (!this.shotPut) {
-      this.throwDisplay.textContent = `throw charge ${(this.throwCharge * 100).toFixed(0)}%`;
+    const shotPut = this.latestShotPut;
+    if (!shotPut) {
+      this.throwDisplay.textContent = 'throw stats';
       return;
     }
-    const airtime = this.elapsed - this.shotPut.physics.startTime;
-    this.throwDisplay.textContent = `throw ${this.shotPut.physics.getVelocity().length().toFixed(1)} m/s ${airtime.toFixed(1)}s max ${this.shotPut.physics.maxAltitude.toFixed(1)}m dist ${this.shotPut.physics.getSurfaceDistance().toFixed(1)}m`;
+    const airtime = this.elapsed - shotPut.physics.startTime;
+    this.throwDisplay.textContent = `throw ${shotPut.physics.getVelocity().length().toFixed(1)} m/s ${airtime.toFixed(1)}s max ${shotPut.physics.maxAltitude.toFixed(1)}m dist ${shotPut.physics.getSurfaceDistance().toFixed(1)}m`;
+  }
+
+  private updateThrowChargeReadout(): void {
+    if (!this.throwChargeDisplay) {
+      return;
+    }
+    this.throwChargeDisplay.textContent = `throw charge ${(this.throwCharge * 100).toFixed(0)}%`;
   }
 
   private getPlanetCoordinates(snapshot: PlayerPhysicsSnapshot): { longitude: number; latitude: number; altitude: number } {
@@ -389,11 +412,12 @@ export class TrackPlanetGame {
   }
 
   private checkThrowHooks(snapshot: PlayerPhysicsSnapshot): void {
-    if (!this.shotPut) {
+    const shotPut = this.latestShotPut;
+    if (!shotPut) {
       return;
     }
-    const airtime = this.elapsed - this.shotPut.physics.startTime;
-    const throwSpeed = this.shotPut.physics.getVelocity().length();
+    const airtime = this.elapsed - shotPut.physics.startTime;
+    const throwSpeed = shotPut.physics.getVelocity().length();
     if (this.firstThrowFired) {
       this.firstThrowFired = false;
       console.info('Track Planet event: first throw');
@@ -402,7 +426,7 @@ export class TrackPlanetGame {
       this.tenSecondAirtimeFired = true;
       console.info('Track Planet event: 10 second airtime');
     }
-    if (!this.orbitThrowFired && this.shotPut.physics.getSurfaceDistance() >= PLANET_CIRCUMFERENCE_METERS) {
+    if (!this.orbitThrowFired && shotPut.physics.getSurfaceDistance() >= PLANET_CIRCUMFERENCE_METERS) {
       this.orbitThrowFired = true;
       console.info('Track Planet event: complete one orbit throw');
     }
@@ -410,7 +434,7 @@ export class TrackPlanetGame {
       this.escapeThrowFired = true;
       console.info('Track Planet event: escape velocity throw');
     }
-    if (!this.bounceFiveFired && this.shotPut.physics.bounceCount >= 5) {
+    if (!this.bounceFiveFired && shotPut.physics.bounceCount >= 5) {
       this.bounceFiveFired = true;
       console.info('Track Planet event: bounce 5 times');
     }
