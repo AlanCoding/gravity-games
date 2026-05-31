@@ -41,4 +41,47 @@ describe('PlayerPhysics', () => {
     expect(snapshot.speed).toBeLessThan(PLAYER_RUN_REFERENCE_SPEED_METERS_PER_SECOND + 0.3);
     expect(snapshot.sliding).toBe(false);
   });
+
+  it('can recover from a sliding turn instead of staying stuck', () => {
+    const physics = new PlayerPhysics({
+      planetRadius: PLANET_RADIUS_METERS,
+      surfaceGravity: SURFACE_GRAVITY,
+      bodyCenterHeight: PLAYER_CENTER_HEIGHT_METERS,
+      baselineAcceleration: PLAYER_BASELINE_ACCELERATION_METERS_PER_SECOND_SQUARED,
+      referenceSpeed: PLAYER_RUN_REFERENCE_SPEED_METERS_PER_SECOND,
+      staticFrictionCoefficient: PLAYER_STATIC_FRICTION_COEFFICIENT,
+      kineticFrictionCoefficient: PLAYER_KINETIC_FRICTION_COEFFICIENT,
+      jumpSpeed: 1.4,
+      initialUp: new THREE.Vector3(1, 0, 0),
+    });
+
+    let snapshot = physics.getSnapshot();
+    for (let i = 0; i < 240; i += 1) {
+      const desiredDirection = new THREE.Vector3(0, 0, 1).projectOnPlane(snapshot.radialUp).normalize();
+      physics.beforePhysicsStep({
+        dt: 1 / 60,
+        desiredTangentDirection: desiredDirection,
+        jumpRequested: false,
+        poleVaultRequested: false,
+      });
+      snapshot = physics.getSnapshot();
+    }
+
+    let slidingDuringTurn = false;
+    for (let i = 0; i < 240; i += 1) {
+      const desiredDirection = new THREE.Vector3(0, 1, 0).projectOnPlane(snapshot.radialUp).normalize();
+      physics.beforePhysicsStep({
+        dt: 1 / 60,
+        desiredTangentDirection: desiredDirection,
+        jumpRequested: false,
+        poleVaultRequested: false,
+      });
+      snapshot = physics.getSnapshot();
+      slidingDuringTurn ||= snapshot.sliding;
+    }
+
+    expect(slidingDuringTurn).toBe(true);
+    expect(snapshot.sliding).toBe(false);
+    expect(snapshot.velocity.projectOnPlane(snapshot.radialUp).dot(new THREE.Vector3(0, 1, 0).projectOnPlane(snapshot.radialUp))).toBeGreaterThan(0.5);
+  });
 });

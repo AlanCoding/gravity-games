@@ -149,23 +149,29 @@ export class PlayerPhysics {
 
     const desiredDirection = desired.clone().normalize();
     const currentSpeed = tangentVelocity.length();
-    const currentDirection = currentSpeed > 0.0001 ? tangentVelocity.clone().normalize() : desiredDirection.clone();
-    const turnAngle = currentDirection.angleTo(desiredDirection);
     const normalForceN = this.getNormalForceLbf() * 4.4482216152605;
     const staticLimit = this.options.staticFrictionCoefficient * normalForceN / Math.max(this.playerMassKg, 0.001);
     const kineticLimit = this.options.kineticFrictionCoefficient * normalForceN / Math.max(this.playerMassKg, 0.001);
     const driveAccel = this.driveAccelerationForSpeed(currentSpeed);
-    const headingSlack = currentSpeed > 0.001 ? (staticLimit * dt) / Math.max(currentSpeed, 0.001) : Math.PI;
-    const turnSlip = currentSpeed > 0.001 && turnAngle > headingSlack + 0.02;
+    const forwardSpeed = tangentVelocity.dot(desiredDirection);
+    const lateralVelocity = tangentVelocity.clone().addScaledVector(desiredDirection, -forwardSpeed);
+    const lateralSpeed = lateralVelocity.length();
     const accelLimited = driveAccel > staticLimit + 0.0001;
-    const useSliding = turnSlip || accelLimited;
-    const availableAccel = Math.min(driveAccel, useSliding ? kineticLimit : staticLimit);
-    this.velocity.copy(tangentVelocity.addScaledVector(desiredDirection, availableAccel * dt));
+    const turnLimited = lateralSpeed > staticLimit * dt + 0.001;
+    const useSliding = accelLimited || turnLimited;
+    const lateralDrop = Math.min(lateralSpeed, (useSliding ? kineticLimit : staticLimit) * dt);
+    const reducedLateral = lateralSpeed > 0.0001
+      ? lateralVelocity.setLength(Math.max(0, lateralSpeed - lateralDrop))
+      : lateralVelocity.set(0, 0, 0);
+    const acceleratedForward = Math.max(0, forwardSpeed) + driveAccel * dt;
+    this.velocity.copy(
+      desiredDirection.clone().multiplyScalar(acceleratedForward).add(reducedLateral),
+    );
 
     if (useSliding) {
       this.sliding = true;
       const speedSlip = THREE.MathUtils.clamp((driveAccel - staticLimit) / Math.max(staticLimit, 0.001), 0, 1);
-      const turnSlipIntensity = THREE.MathUtils.clamp((turnAngle - headingSlack) / Math.max(Math.PI / 2, 0.001), 0, 1);
+      const turnSlipIntensity = THREE.MathUtils.clamp(lateralSpeed / Math.max(currentSpeed, 0.001), 0, 1);
       this.slidingIntensity = Math.max(speedSlip, turnSlipIntensity);
     }
   }
