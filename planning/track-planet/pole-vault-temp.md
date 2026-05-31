@@ -9,6 +9,9 @@ This is a temporary note for the current pole-vault refactor.
 - the conversion should take about 1 to 2 seconds
 - the pole visual should remain visible during that conversion
 - the pole should be a simple visual prop, not a real physics object
+- once horizontal velocity reaches zero, the pole should disappear even if the control is still held
+- the conversion should only be available while the runner is on the surface
+- if the runner hits the ground during the conversion, the vault ends
 
 ## Temporary implementation idea
 
@@ -26,4 +29,4 @@ This is a temporary note for the current pole-vault refactor.
 
 ## Exit condition
 
-This note should be removed or replaced once the pole vault mechanic is implemented as a proper gameplay system.
+This note should be removed or replaced once the pole vault mechanic is integrated into the broader powerup and achievement loop. The first iteration of the basic pole-vault mechanic is now considered complete.

@@ -11,3 +11,4 @@ Current notes:
 - [Jacob's Ladder concept](jacobs-ladder/concept.md)
 
 The Cislunar docs are a separate future-game concept. Track Planet notes belong under `planning/track-planet/`.
+Track Planet mechanics are currently at the “first iteration complete” stage. Next comes powerups, then achievements.

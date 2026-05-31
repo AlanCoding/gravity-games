@@ -1,11 +1,18 @@
 # Track Planet Mechanics
 
-Track Planet is a spherical-track running game on a 400 m circumference planet. The core idea is simple:
+Track Planet is a spherical-track running game on a 400 m circumference planet. The current first-pass mechanics are implemented. The next phase is powerups, then achievements.
+
+Working subtitle for the page:
+
+- `pole vault and throw shot put balls into orbit`
+
+Core idea:
 
 - the player runs around a small planet
 - the normal force changes with speed
 - sliding appears when the runner asks for more lateral or tangential acceleration than the ground can support
-- later powerups can push the player into orbit and escape conditions
+- the player can pole-vault and throw shot puts into orbit
+- later powerups will push the player into orbit and escape conditions
 
 ## Baseline geometry
 
@@ -38,6 +45,8 @@ The important behavior is:
 - if the requested turn or drive exceeds static traction, the runner slides
 - if no movement input is held, the runner is a passive block and slows under kinetic friction
 
+This is the baseline movement model. It is the current “finished mechanics” layer before powerups.
+
 ## Orbit and launch behavior
 
 The player and shot put use the same radial gravity model. Orbit should be awarded only when the osculating orbit is actually clear of the surface.
@@ -57,6 +66,33 @@ Sliding is a gameplay state, not a failure state.
 - turning can trigger it even when straight-line speed is still acceptable
 - it should obey the kinetic coefficient once active
 
+## Next phase: powerups
+
+Powerups are the next gameplay layer after the baseline mechanics.
+
+Planned powerup categories:
+
+- ability level tiers
+  - baseline runner
+  - high-school runner
+  - world-record runner
+- rocket pack
+  - pushes the player forward while in air
+  - needed for circularization and later orbit-control routes
+- shot put powerups
+  - raise release strength above the current 100% cap
+  - current 100% becomes the pre-powerup baseline
+  - later 150% is the stronger post-powerup ceiling
+
+Powerups should be:
+
+- placed directly on the planet surface
+- visually obvious
+- labeled with simple billboard text
+- signed by `-coach`
+
+The billboard text should explain what the pickup is and what it does, without requiring the player to guess.
+
 ## Powerup tiers
 
 Later powerups can raise:
@@ -64,13 +100,34 @@ Later powerups can raise:
 - baseline drive acceleration
 - reference speed
 - effective traction envelope
+- shot put release power
 
 Suggested tiers:
 
 - baseline runner
-- strong runner
-- elite runner
+- high-school runner
+- world-record runner
 - orbit/escape tier
+
+The ability tiers and the shot put power tiers are related but separate. A strong runner can still have a modest throw, and a throw powerup can exist without changing the runner tier.
+
+## Next phase: achievements
+
+Achievements come after powerups.
+
+Some achievements will require powerups to be reachable at all. The obvious examples are:
+
+- orbit
+- escape
+- shot put orbit
+- shot put escape
+
+The design intent is:
+
+- first finish the mechanics
+- then place powerups on the planet
+- then tune achievements against those powerups
+- then tune the collectible economy around the achievement targets
 
 ## Temporary notes
 
