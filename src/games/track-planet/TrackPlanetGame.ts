@@ -131,6 +131,8 @@ export class TrackPlanetGame {
     window.cancelAnimationFrame(this.animationHandle);
     this.input.dispose();
     this.resizeAbortController.abort();
+    this.pole?.dispose();
+    this.pole = null;
     this.world.dispose();
   }
 
@@ -152,14 +154,14 @@ export class TrackPlanetGame {
 
     const desiredTangentDirection = this.getDesiredTangentDirection(snapshotBefore);
     const jumpRequested = this.shouldJump(snapshotBefore);
-    const poleVaultRequested = false;
+    const poleVaultHeld = this.input.isPressed('KeyP');
     const wasThrowPressed = this.throwWasPressed;
     this.updateThrowCharge(dt);
     this.playerPhysics.beforePhysicsStep({
       dt,
       desiredTangentDirection,
       jumpRequested,
-      poleVaultRequested,
+      poleVaultHeld,
     });
     for (const shotPut of this.shotPuts) {
       shotPut.physics.beforePhysicsStep(dt);
@@ -170,29 +172,24 @@ export class TrackPlanetGame {
     this.resolveShotPutPlayerCollisions(snapshot);
     this.resolveShotPutShotPutCollisions();
 
-    if (snapshot.jumped) {
-      if (poleVaultRequested) {
-        this.pole?.dispose();
-        this.pole = null;
-      }
-      this.lastJumpPressedTime = Number.NEGATIVE_INFINITY;
-      this.lastGroundedTime = Number.NEGATIVE_INFINITY;
-      this.achievements.onJump?.(this.payload(snapshot));
-    }
-
     this.updatePlayer(snapshot);
     this.updatePlayerShadow(snapshot);
+    this.updatePoleVisual(snapshot);
     this.updateSlidingVfx(snapshot, dt);
     for (const shotPut of this.shotPuts) {
       shotPut.updateFromPhysics();
     }
-    this.pole?.updateFromPhysics();
     this.updateCamera(snapshot);
     this.updateReadout(snapshot);
     this.updateThrowChargeReadout();
     this.updateThrowReadout();
     this.checkThrowHooks(snapshot);
     this.checkAchievementHooks(snapshot);
+    if (snapshot.jumped) {
+      this.lastJumpPressedTime = Number.NEGATIVE_INFINITY;
+      this.lastGroundedTime = Number.NEGATIVE_INFINITY;
+      this.achievements.onJump?.(this.payload(snapshot));
+    }
     this.world.rotatingObject.rotation.x += dt * 0.8;
     this.world.rotatingObject.rotation.y += dt * 1.2;
     this.world.renderer.render(this.world.scene, this.world.camera);
@@ -209,9 +206,6 @@ export class TrackPlanetGame {
     const pressed = this.input.isPressed('KeyF');
     if (pressed) {
       this.throwCharge = Math.min(1, this.throwCharge + dt / 1.3);
-    }
-    if (this.input.isPressed('KeyP') && !this.pole) {
-      this.spawnPole();
     }
     this.throwWasPressed = pressed;
   }
@@ -250,17 +244,25 @@ export class TrackPlanetGame {
     this.firstThrowFired = true;
   }
 
-  private spawnPole(): void {
+  private updatePoleVisual(snapshot: PlayerPhysicsSnapshot): void {
     if (!this.playerPhysics) {
       return;
     }
-    const snapshot = this.playerPhysics.getSnapshot();
+    if (!snapshot.poleVaulting) {
+      this.pole?.dispose();
+      this.pole = null;
+      return;
+    }
     const forward = this.heading.clone().projectOnPlane(snapshot.radialUp).normalize();
-    const right = new THREE.Vector3().crossVectors(snapshot.radialUp, forward).normalize();
-    const position = snapshot.position.clone().addScaledVector(snapshot.radialUp, 1).addScaledVector(right, 1.6);
-    const orientation = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, snapshot.radialUp, forward));
-    orientation.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -0.55));
-    this.pole = new Pole({ scene: this.world.scene, position, orientation });
+    const groundDistance = PLANET_RADIUS_METERS + PLAYER_CENTER_HEIGHT_METERS + snapshot.groundHeight;
+    const groundPoint = snapshot.radialUp.clone().multiplyScalar(groundDistance);
+    const tipPoint = snapshot.position.clone().addScaledVector(forward, 0.18);
+    if (!this.pole) {
+      const position = groundPoint.clone().add(tipPoint).multiplyScalar(0.5);
+      const orientation = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), snapshot.radialUp.clone().normalize());
+      this.pole = new Pole({ scene: this.world.scene, position, orientation });
+    }
+    this.pole.updateFromPhysics({ basePosition: groundPoint, tipPosition: tipPoint });
   }
 
   private transportHeading(previousUp: THREE.Vector3, nextUp: THREE.Vector3): void {

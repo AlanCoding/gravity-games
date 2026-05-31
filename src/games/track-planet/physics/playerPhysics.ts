@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import {
   PLAYER_EFFECTIVE_MASS_KG,
   PLAYER_SPEED_FALLOFF_EXPONENT,
+  POLE_VAULT_CONVERSION_SECONDS,
+  POLE_VAULT_MIN_START_SPEED_METERS_PER_SECOND,
 } from '../constants';
 import { computeOrbitMetrics, computePlanetGravity, getRadialUp } from './gravity';
 import { type PlanetBoxCollider, resolveSphereAgainstPlanetBox } from './planetCollision';
@@ -10,7 +12,7 @@ export type PlayerPhysicsInput = {
   dt: number;
   desiredTangentDirection: THREE.Vector3;
   jumpRequested: boolean;
-  poleVaultRequested: boolean;
+  poleVaultHeld: boolean;
 };
 
 export type PlayerPhysicsSnapshot = {
@@ -26,6 +28,7 @@ export type PlayerPhysicsSnapshot = {
   normalForceLbf: number;
   sliding: boolean;
   slidingIntensity: number;
+  poleVaulting: boolean;
   orbitalSpeed: number;
   escapeSpeed: number;
   orbitPerigeeAltitude: number;
@@ -39,6 +42,10 @@ export class PlayerPhysics {
   private airborneJumpConsumed = false;
   private sliding = false;
   private slidingIntensity = 0;
+  private poleVaultActive = false;
+  private poleVaultElapsedSeconds = 0;
+  private poleVaultInitialTangentSpeed = 0;
+  private poleVaultInitialTangentDirection = new THREE.Vector3(0, 0, 1);
   private readonly mu: number;
   private readonly surfaceDistance: number;
   private readonly restingNormalForceLbf = 150;
@@ -69,34 +76,35 @@ export class PlayerPhysics {
     this.jumpedThisStep = false;
     this.updateGrounded();
 
-    if (this.grounded) {
+    if (!this.poleVaultActive && this.grounded && input.poleVaultHeld) {
+      const radialUp = getRadialUp(this.position);
+      const tangentVelocity = this.velocity.clone().projectOnPlane(radialUp);
+      const tangentSpeed = tangentVelocity.length();
+      if (tangentSpeed >= POLE_VAULT_MIN_START_SPEED_METERS_PER_SECOND) {
+        this.startPoleVault(tangentVelocity);
+      }
+    }
+
+    if (this.poleVaultActive) {
+      if (!input.poleVaultHeld) {
+        this.endPoleVault();
+      } else {
+        this.advancePoleVault(input.dt);
+      }
+    }
+
+    if (this.poleVaultActive) {
+      this.integrateAirborne(input.dt);
+    } else if (this.grounded) {
       this.airborneJumpConsumed = false;
       this.position.setLength(this.getGroundDistance(this.position));
       this.velocity.projectOnPlane(getRadialUp(this.position));
       this.applyGroundMovement(input.desiredTangentDirection, input.dt);
-    }
-
-    if (input.jumpRequested && (this.grounded || !this.airborneJumpConsumed)) {
-      if (input.poleVaultRequested) {
-        this.applyPoleVault();
-      } else {
+      if (input.jumpRequested && (this.grounded || !this.airborneJumpConsumed)) {
         this.applyJump();
       }
-    }
-
-    if (!this.grounded) {
-      this.velocity.addScaledVector(
-        computePlanetGravity({
-          position: this.position,
-          planetRadius: this.options.planetRadius,
-          surfaceGravity: this.options.surfaceGravity,
-        }),
-        input.dt,
-      );
-      this.position.addScaledVector(this.velocity, input.dt);
-      this.resolvePlanetContact();
     } else {
-      this.walkAlongSurface(input.dt);
+      this.integrateAirborne(input.dt);
     }
 
     this.resolveBlockingCollisions();
@@ -125,6 +133,7 @@ export class PlayerPhysics {
       normalForceLbf,
       sliding: this.sliding,
       slidingIntensity: this.slidingIntensity,
+      poleVaulting: this.poleVaultActive,
       orbitalSpeed: Math.sqrt(this.mu / distance),
       escapeSpeed: Math.sqrt((2 * this.mu) / distance),
       orbitPerigeeAltitude: computeOrbitMetrics({
@@ -192,35 +201,65 @@ export class PlayerPhysics {
     this.jumpedThisStep = true;
   }
 
-  private applyPoleVault(): void {
+  private startPoleVault(tangentVelocity: THREE.Vector3): void {
     const radialUp = getRadialUp(this.position);
-    const tangentVelocity = this.velocity.clone().projectOnPlane(radialUp);
     const tangentSpeed = tangentVelocity.length();
-    const tangentCarry = tangentSpeed * 0.15;
-    const vaultBoost = this.options.jumpSpeed * 5.5 + tangentSpeed * 2.9 + 4.2;
-    const carryDirection = tangentSpeed > 0.0001 ? tangentVelocity.normalize() : new THREE.Vector3();
-
-    this.velocity.copy(carryDirection.multiplyScalar(tangentCarry)).addScaledVector(radialUp, vaultBoost);
+    this.poleVaultActive = true;
+    this.poleVaultElapsedSeconds = 0;
+    this.poleVaultInitialTangentSpeed = tangentSpeed;
+    const fallbackAxis = Math.abs(radialUp.y) < 0.9
+      ? new THREE.Vector3(0, 1, 0)
+      : new THREE.Vector3(1, 0, 0);
+    this.poleVaultInitialTangentDirection = tangentSpeed > 0.0001
+      ? tangentVelocity.clone().normalize()
+      : new THREE.Vector3().crossVectors(radialUp, fallbackAxis).normalize();
     this.grounded = false;
     this.airborneJumpConsumed = true;
     this.jumpedThisStep = true;
   }
 
-  private walkAlongSurface(dt: number): void {
+  private advancePoleVault(dt: number): void {
     const radialUp = getRadialUp(this.position);
     const tangentVelocity = this.velocity.clone().projectOnPlane(radialUp);
     const tangentSpeed = tangentVelocity.length();
-    if (tangentSpeed < 0.0001) {
-      this.velocity.set(0, 0, 0);
-      this.position.setLength(this.getGroundDistance(this.position));
+    const tangentDirection = tangentSpeed > 0.0001
+      ? tangentVelocity.clone().normalize()
+      : this.poleVaultInitialTangentDirection.clone().projectOnPlane(radialUp).normalize();
+    if (tangentDirection.lengthSq() < 0.0001 || tangentSpeed < 0.0001) {
+      this.endPoleVault();
       return;
     }
 
-    const direction = tangentVelocity.clone().normalize();
-    const rotationAxis = new THREE.Vector3().crossVectors(radialUp, direction).normalize();
-    const angle = (tangentSpeed * dt) / this.getGroundDistance(this.position);
-    this.position.applyAxisAngle(rotationAxis, angle).setLength(this.getGroundDistance(this.position));
-    this.velocity.copy(direction.projectOnPlane(getRadialUp(this.position)).normalize().multiplyScalar(tangentSpeed));
+    this.poleVaultElapsedSeconds += dt;
+    const progress = THREE.MathUtils.clamp(this.poleVaultElapsedSeconds / POLE_VAULT_CONVERSION_SECONDS, 0, 1);
+    const targetTangentSpeed = this.poleVaultInitialTangentSpeed * (1 - progress);
+    const convertedSpeed = Math.max(0, tangentSpeed - targetTangentSpeed);
+    if (convertedSpeed > 0.0001) {
+      this.velocity.addScaledVector(tangentDirection, -convertedSpeed);
+      this.velocity.addScaledVector(radialUp, convertedSpeed);
+    }
+    if (progress >= 1 || targetTangentSpeed <= 0.01) {
+      this.endPoleVault();
+    }
+  }
+
+  private endPoleVault(): void {
+    this.poleVaultActive = false;
+    this.poleVaultElapsedSeconds = 0;
+    this.poleVaultInitialTangentSpeed = 0;
+  }
+
+  private integrateAirborne(dt: number): void {
+    this.velocity.addScaledVector(
+      computePlanetGravity({
+        position: this.position,
+        planetRadius: this.options.planetRadius,
+        surfaceGravity: this.options.surfaceGravity,
+      }),
+      dt,
+    );
+    this.position.addScaledVector(this.velocity, dt);
+    this.resolvePlanetContact();
   }
 
   private resolvePlanetContact(): void {
@@ -236,6 +275,9 @@ export class PlayerPhysics {
     if (radialVelocity < 0) {
       this.velocity.addScaledVector(radialUp, -radialVelocity);
     }
+    if (this.poleVaultActive) {
+      this.endPoleVault();
+    }
     this.sliding = false;
     this.slidingIntensity = 0;
     this.grounded = true;
@@ -243,6 +285,10 @@ export class PlayerPhysics {
   }
 
   private updateGrounded(): void {
+    if (this.poleVaultActive) {
+      this.grounded = false;
+      return;
+    }
     if (this.airborneJumpConsumed && getRadialUp(this.position).dot(this.velocity) > 0.1) {
       this.grounded = false;
       return;
