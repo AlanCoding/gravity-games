@@ -14,6 +14,8 @@ export const trackPlanetGame = {
     latitudeDisplay: HTMLElement | null;
     altitudeDisplay: HTMLElement | null;
     throwDisplay: HTMLElement | null;
+    powerupDisplay: HTMLElement | null;
+    timeDisplay: HTMLElement | null;
     achievementNotifier?: (message: string) => void;
   }): TrackPlanetGame =>
     new TrackPlanetGame({

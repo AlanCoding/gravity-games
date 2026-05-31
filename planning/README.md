@@ -12,3 +12,4 @@ Current notes:
 
 The Cislunar docs are a separate future-game concept. Track Planet notes belong under `planning/track-planet/`.
 Track Planet mechanics are currently at the “first iteration complete” stage. Next comes powerups, then achievements.
+Track Planet achievements now include orbit/escape plus time-trial goals based on surface distance around the planet.

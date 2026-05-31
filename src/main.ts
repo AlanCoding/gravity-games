@@ -43,6 +43,8 @@ function startTrackPlanet(): void {
     latitudeDisplay: document.querySelector<HTMLElement>('#latitudeDisplay'),
     altitudeDisplay: document.querySelector<HTMLElement>('#altitudeDisplay'),
     throwDisplay: document.querySelector<HTMLElement>('#throwDisplay'),
+    powerupDisplay: document.querySelector<HTMLElement>('#powerupDisplay'),
+    timeDisplay: document.querySelector<HTMLElement>('#timeDisplay'),
     achievementNotifier: flashAchievement,
   });
   currentGame.start();
@@ -118,6 +120,7 @@ function renderAchievements(): void {
           <ul class="achievement-list">
             <li>Jump</li>
             <li>Reach orbit as the player when perigee altitude stays above the planet</li>
+            <li>Coming in for landing</li>
             <li>Escape as the player</li>
             <li>Throw a shot put</li>
             <li>Shot put reaches orbit</li>
@@ -125,6 +128,11 @@ function renderAchievements(): void {
             <li>Complete one orbit throw</li>
             <li>Ten second airtime throw</li>
             <li>Bounce a shot put five times</li>
+            <li>Run 100 m in under 9.9 s</li>
+            <li>"Your father ran the 100m in ten flat"</li>
+            <li>"Well, I&#39;ll run it in 9.9"</li>
+            <li>Record a 100 m time</li>
+            <li>Record a 400 m time</li>
           </ul>
         </article>
 
@@ -167,14 +175,14 @@ function renderTrackPlanet(): void {
             <div class="game-banner-title">
               <a class="eyebrow game-home-link" href="/gravity-games/">Gravity Games</a>
               <h1>Track Planet</h1>
-              <p class="page-copy">Run a track wrapped around a small planet and push things into orbit.</p>
+              <p class="page-copy">Pole vault, throw shot put balls into orbit, rocket into oblivion.</p>
             </div>
             <div class="readout" aria-live="polite">
               <span id="velocityDisplay">0.0 m/s</span>
               <span id="orbitalDisplay">orbital 0.0 m/s</span>
               <span id="throwChargeDisplay">throw charge 0%</span>
               <span id="longitudeDisplay">normal 150 lbf</span>
-              <span id="latitudeDisplay"></span>
+              <span id="latitudeDisplay">rocket fuel N/A</span>
               <span id="altitudeDisplay">alt 0.0 m</span>
             </div>
           </div>
@@ -203,12 +211,24 @@ function renderTrackPlanet(): void {
             </div>
             <div>
               <dt>P</dt>
-              <dd>Spawn a pole vault pole</dd>
+              <dd>Hold to pole vault</dd>
+            </div>
+            <div>
+              <dt>R</dt>
+              <dd>Use rocket pack in air, if collected</dd>
             </div>
           </dl>
           <div class="throw-panel">
             <h2>Throw Stats</h2>
             <p id="throwDisplay">throw charge 0%</p>
+          </div>
+          <div class="powerup-panel">
+            <h2>Powerups</h2>
+            <p id="powerupDisplay">runner baseline | shot put 100% | rocket fuel N/A</p>
+          </div>
+          <div class="time-panel">
+            <h2>Time Trials</h2>
+            <p id="timeDisplay">100m -- | 400m --</p>
           </div>
         </section>
       </div>

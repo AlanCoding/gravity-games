@@ -5,6 +5,7 @@ const GAME_KEYS = [
   'KeyD',
   'KeyF',
   'KeyP',
+  'KeyR',
   'ArrowUp',
   'ArrowDown',
   'ArrowLeft',

@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import {
   PLAYER_EFFECTIVE_MASS_KG,
   PLAYER_SPEED_FALLOFF_EXPONENT,
+  PLAYER_BASELINE_TIER_ACCELERATION_MULTIPLIERS,
+  PLAYER_BASELINE_TIER_REFERENCE_SPEED_MULTIPLIERS,
   POLE_VAULT_CONVERSION_SECONDS,
   POLE_VAULT_MIN_START_SPEED_METERS_PER_SECOND,
 } from '../constants';
@@ -50,6 +52,7 @@ export class PlayerPhysics {
   private readonly surfaceDistance: number;
   private readonly restingNormalForceLbf = 150;
   private readonly playerMassKg: number;
+  private runnerTier = 0;
 
   constructor(
     private readonly options: {
@@ -76,7 +79,7 @@ export class PlayerPhysics {
     this.jumpedThisStep = false;
     this.updateGrounded();
 
-    if (!this.poleVaultActive && this.grounded && input.poleVaultHeld) {
+    if (!this.poleVaultActive && this.grounded && this.isOnSurface() && input.poleVaultHeld) {
       const radialUp = getRadialUp(this.position);
       const tangentVelocity = this.velocity.clone().projectOnPlane(radialUp);
       const tangentSpeed = tangentVelocity.length();
@@ -144,6 +147,14 @@ export class PlayerPhysics {
         surfaceGravity: this.options.surfaceGravity,
       }).perigeeAltitude,
     };
+  }
+
+  setRunnerTier(tier: number): void {
+    this.runnerTier = THREE.MathUtils.clamp(Math.round(tier), 0, 2);
+  }
+
+  applyVelocityDelta(delta: THREE.Vector3): void {
+    this.velocity.add(delta);
   }
 
   private applyGroundMovement(desiredTangentDirection: THREE.Vector3, dt: number): void {
@@ -314,6 +325,10 @@ export class PlayerPhysics {
     this.grounded = this.position.length() - this.getGroundDistance(this.position) <= 0.08;
   }
 
+  private isOnSurface(): boolean {
+    return this.position.length() - this.getGroundDistance(this.position) <= 0.015;
+  }
+
   private getGroundDistance(position: THREE.Vector3): number {
     return this.surfaceDistance + this.getGroundHeight(position);
   }
@@ -354,8 +369,12 @@ export class PlayerPhysics {
 
   private driveAccelerationForSpeed(speed: number): number {
     const baseAcceleration = this.options.baselineAcceleration;
-    const referenceSpeed = Math.max(this.options.referenceSpeed, 0.001);
+    const referenceSpeed = Math.max(
+      this.options.referenceSpeed * PLAYER_BASELINE_TIER_REFERENCE_SPEED_MULTIPLIERS[this.runnerTier],
+      0.001,
+    );
     const falloff = Math.max(0, 1 - Math.pow(speed / referenceSpeed, PLAYER_SPEED_FALLOFF_EXPONENT));
-    return baseAcceleration * falloff;
+    const accelerationMultiplier = PLAYER_BASELINE_TIER_ACCELERATION_MULTIPLIERS[this.runnerTier];
+    return baseAcceleration * accelerationMultiplier * falloff;
   }
 }

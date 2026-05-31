@@ -13,8 +13,8 @@ describe('computeShotPutReleaseVelocity', () => {
       charge: 1,
     });
 
-    expect(release.length()).toBeGreaterThan(7.5);
-    expect(release.dot(forward)).toBeGreaterThan(5.5);
+    expect(release.length()).toBeGreaterThan(6.3);
+    expect(release.dot(forward)).toBeGreaterThan(4.2);
   });
 
   it('keeps the runner tangent velocity even on a tapped release', () => {
@@ -43,7 +43,7 @@ describe('computeShotPutReleaseVelocity', () => {
       charge: 1,
     });
 
-    expect(release.length()).toBeLessThan(8.7);
+    expect(release.length()).toBeLessThan(7.2);
     expect(release.dot(radialUp)).toBeGreaterThan(0);
   });
 });

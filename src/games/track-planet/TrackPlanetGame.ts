@@ -12,6 +12,10 @@ import {
   PLAYER_KINETIC_FRICTION_COEFFICIENT,
   PLAYER_RUN_REFERENCE_SPEED_METERS_PER_SECOND,
   PLAYER_STATIC_FRICTION_COEFFICIENT,
+  ROCKET_FUEL_BURN_RATE_METERS_PER_SECOND,
+  ROCKET_FUEL_MAX_METERS_PER_SECOND,
+  SHOT_PUT_BASE_RELEASE_MULTIPLIER,
+  SHOT_PUT_POWERUP_RELEASE_MULTIPLIER,
   SHADOW_MAX_ALTITUDE_METERS,
   SHADOW_SURFACE_OFFSET_METERS,
   SURFACE_GRAVITY,
@@ -30,6 +34,8 @@ import { PlayerPhysics, type PlayerPhysicsSnapshot } from './physics/playerPhysi
 import { createRampSurface } from './physics/rampSurface';
 import { createBleacherColliderVolume, type PlanetBoxCollider } from './physics/planetCollision';
 import { computeShotPutReleaseVelocity } from './physics/throwPhysics';
+import { createTrackPlanetPowerups, type TrackPlanetPowerup } from './powerups';
+import { SurfaceTimeTrials } from './timeTrials';
 import { createTrackPlanetScene, getTrackStartUp, type TrackPlanetScene } from './scene';
 
 export type TrackPlanetGameOptions = {
@@ -41,6 +47,8 @@ export type TrackPlanetGameOptions = {
   latitudeDisplay: HTMLElement | null;
   altitudeDisplay: HTMLElement | null;
   throwDisplay: HTMLElement | null;
+  powerupDisplay: HTMLElement | null;
+  timeDisplay: HTMLElement | null;
   achievements?: AchievementHooks;
 };
 
@@ -53,12 +61,18 @@ export class TrackPlanetGame {
   private readonly latitudeDisplay: HTMLElement | null;
   private readonly altitudeDisplay: HTMLElement | null;
   private readonly throwDisplay: HTMLElement | null;
+  private readonly powerupDisplay: HTMLElement | null;
+  private readonly timeDisplay: HTMLElement | null;
   private readonly achievements: AchievementHooks;
   private readonly input = new InputController();
   private readonly clock = new THREE.Clock();
   private readonly world: TrackPlanetScene;
   private playerPhysics: PlayerPhysics | null = null;
   private blockingVolumes: PlanetBoxCollider[] = [];
+  private readonly powerups: TrackPlanetPowerup[] = [];
+  private timeTrials: SurfaceTimeTrials | null = null;
+  private time100mSeconds: number | null = null;
+  private time400mSeconds: number | null = null;
   private readonly shotPuts: ShotPut[] = [];
   private latestShotPut: ShotPut | null = null;
   private pole: Pole | null = null;
@@ -66,6 +80,11 @@ export class TrackPlanetGame {
   private readonly slideSparkMesh = new THREE.Points(
     new THREE.BufferGeometry(),
     new THREE.PointsMaterial({ color: 0xf7e38a, size: 0.08, transparent: true, opacity: 0.95 }),
+  );
+  private readonly rocketSparks: Array<{ position: THREE.Vector3; velocity: THREE.Vector3; ttl: number }> = [];
+  private readonly rocketSparkMesh = new THREE.Points(
+    new THREE.BufferGeometry(),
+    new THREE.PointsMaterial({ color: 0xff6a5a, size: 0.1, transparent: true, opacity: 0.98 }),
   );
   private heading = TRACK_START_FORWARD.clone();
   private cameraPitch = 0.24;
@@ -75,13 +94,23 @@ export class TrackPlanetGame {
   private lastGroundedTime = 0;
   private lastJumpPressedTime = Number.NEGATIVE_INFINITY;
   private throwCharge = 0;
+  private throwChargeCap = 1;
   private throwWasPressed = false;
+  private runnerTier = 0;
+  private shotPutPowerMultiplier = SHOT_PUT_BASE_RELEASE_MULTIPLIER;
+  private rocketFuelCapacityMps = 0;
+  private rocketFuelRemainingMps = 0;
   private firstThrowFired = false;
   private tenSecondAirtimeFired = false;
   private orbitThrowFired = false;
   private bounceFiveFired = false;
   private orbitHookFired = false;
   private escapeHookFired = false;
+  private landingFromOrbitHookFired = false;
+  private playerWasOrbiting = false;
+  private time100mHookFired = false;
+  private time400mHookFired = false;
+  private fast100mHookFired = false;
   private readonly resizeAbortController = new AbortController();
 
   constructor(options: TrackPlanetGameOptions) {
@@ -93,6 +122,8 @@ export class TrackPlanetGame {
     this.latitudeDisplay = options.latitudeDisplay;
     this.altitudeDisplay = options.altitudeDisplay;
     this.throwDisplay = options.throwDisplay;
+    this.powerupDisplay = options.powerupDisplay;
+    this.timeDisplay = options.timeDisplay;
     this.achievements = options.achievements ?? {};
     this.world = createTrackPlanetScene(this.container, PLANET_RADIUS_METERS, PLAYER_HEIGHT_METERS);
   }
@@ -102,7 +133,9 @@ export class TrackPlanetGame {
     window.addEventListener('resize', () => this.world.resize(), { signal: this.resizeAbortController.signal });
     this.world.resize();
     this.world.scene.add(this.slideSparkMesh);
+    this.world.scene.add(this.rocketSparkMesh);
     this.blockingVolumes = [createBleacherColliderVolume(PLANET_RADIUS_METERS)];
+    this.powerups.push(...createTrackPlanetPowerups(this.world.scene, PLANET_RADIUS_METERS));
     this.playerPhysics = new PlayerPhysics({
       planetRadius: PLANET_RADIUS_METERS,
       surfaceGravity: SURFACE_GRAVITY,
@@ -117,12 +150,21 @@ export class TrackPlanetGame {
       groundSurfaces: [createRampSurface(PLANET_RADIUS_METERS)],
     });
     const snapshot = this.playerPhysics.getSnapshot();
+    this.timeTrials = new SurfaceTimeTrials({
+      circumferenceMeters: PLANET_CIRCUMFERENCE_METERS,
+      startPosition: snapshot.position,
+    });
+    this.playerPhysics.setRunnerTier(this.runnerTier);
     this.updatePlayer(snapshot);
     this.updatePlayerShadow(snapshot);
+    this.updatePowerups(snapshot);
+    this.updateTimeTrials(snapshot);
     this.updateCamera(snapshot, true);
     this.updateReadout(snapshot);
     this.updateThrowChargeReadout();
     this.updateThrowReadout();
+    this.updatePowerupReadout();
+    this.updateTimeReadout();
     this.container.focus();
     this.animationHandle = window.requestAnimationFrame(() => this.frame());
   }
@@ -155,8 +197,10 @@ export class TrackPlanetGame {
     const desiredTangentDirection = this.getDesiredTangentDirection(snapshotBefore);
     const jumpRequested = this.shouldJump(snapshotBefore);
     const poleVaultHeld = this.input.isPressed('KeyP');
+    const rocketRequested = this.input.isPressed('KeyR');
     const wasThrowPressed = this.throwWasPressed;
     this.updateThrowCharge(dt);
+    this.updateRocketFuel(snapshotBefore, dt, rocketRequested);
     this.playerPhysics.beforePhysicsStep({
       dt,
       desiredTangentDirection,
@@ -169,6 +213,8 @@ export class TrackPlanetGame {
     this.releaseThrowIfNeeded(wasThrowPressed, snapshotBefore);
     const snapshot = this.playerPhysics.getSnapshot();
     this.transportHeading(snapshotBefore.radialUp, snapshot.radialUp);
+    this.updatePowerups(snapshot);
+    this.updateTimeTrials(snapshot);
     this.resolveShotPutPlayerCollisions(snapshot);
     this.resolveShotPutShotPutCollisions();
 
@@ -176,6 +222,7 @@ export class TrackPlanetGame {
     this.updatePlayerShadow(snapshot);
     this.updatePoleVisual(snapshot);
     this.updateSlidingVfx(snapshot, dt);
+    this.updateRocketVfx(snapshot, dt, rocketRequested);
     for (const shotPut of this.shotPuts) {
       shotPut.updateFromPhysics();
     }
@@ -183,6 +230,8 @@ export class TrackPlanetGame {
     this.updateReadout(snapshot);
     this.updateThrowChargeReadout();
     this.updateThrowReadout();
+    this.updatePowerupReadout();
+    this.updateTimeReadout();
     this.checkThrowHooks(snapshot);
     this.checkAchievementHooks(snapshot);
     if (snapshot.jumped) {
@@ -205,7 +254,7 @@ export class TrackPlanetGame {
   private updateThrowCharge(dt: number): void {
     const pressed = this.input.isPressed('KeyF');
     if (pressed) {
-      this.throwCharge = Math.min(1, this.throwCharge + dt / 1.3);
+      this.throwCharge = Math.min(this.throwChargeCap, this.throwCharge + dt / 1.3);
     }
     this.throwWasPressed = pressed;
   }
@@ -229,6 +278,8 @@ export class TrackPlanetGame {
       forward,
       radialUp: snapshot.radialUp,
       charge: this.throwCharge,
+      chargeCap: this.throwChargeCap,
+      powerMultiplier: this.shotPutPowerMultiplier,
     });
     const shotPut = new ShotPut({
       scene: this.world.scene,
@@ -342,11 +393,14 @@ export class TrackPlanetGame {
     const up = snapshot.radialUp;
     const forward = this.heading.clone().projectOnPlane(up).normalize();
     const orbitForward = forward.clone().applyAxisAngle(up, this.cameraOrbitYaw).normalize();
-    const target = snapshot.position.clone().addScaledVector(up, 1.4);
+    const altitudeFactor = THREE.MathUtils.clamp(snapshot.altitudeAboveGround / 180, 0, 1);
+    const target = snapshot.position.clone().addScaledVector(up, THREE.MathUtils.lerp(1.4, 12, altitudeFactor));
+    const chaseDistance = THREE.MathUtils.lerp(18, 58, altitudeFactor);
+    const verticalOffset = THREE.MathUtils.lerp(10, 28, altitudeFactor) + Math.sin(this.cameraPitch) * THREE.MathUtils.lerp(12, 22, altitudeFactor);
     const chase = target
       .clone()
-      .addScaledVector(orbitForward, -18)
-      .addScaledVector(up, 10 + Math.sin(this.cameraPitch) * 12);
+      .addScaledVector(orbitForward, -chaseDistance)
+      .addScaledVector(up, verticalOffset);
     if (immediate) {
       this.world.camera.position.copy(chase);
     } else {
@@ -367,7 +421,7 @@ export class TrackPlanetGame {
       this.longitudeDisplay.textContent = `normal ${snapshot.normalForceLbf.toFixed(0)} lbf`;
     }
     if (this.latitudeDisplay) {
-      this.latitudeDisplay.textContent = '';
+      this.latitudeDisplay.textContent = this.getRocketFuelLabel();
     }
     if (this.altitudeDisplay) {
       this.altitudeDisplay.textContent = `alt ${snapshot.altitude.toFixed(1)} m`;
@@ -392,6 +446,129 @@ export class TrackPlanetGame {
       return;
     }
     this.throwChargeDisplay.textContent = `throw charge ${(this.throwCharge * 100).toFixed(0)}%`;
+  }
+
+  private updatePowerupReadout(): void {
+    if (!this.powerupDisplay) {
+      return;
+    }
+    const runnerTierLabel = ['baseline', 'high-school', 'world-record'][this.runnerTier] ?? 'baseline';
+    const shotPutLabel = this.shotPutPowerMultiplier > SHOT_PUT_BASE_RELEASE_MULTIPLIER + 0.001
+      ? 'shot put 150%'
+      : 'shot put 100%';
+    const rocketLabel = this.getRocketFuelLabel(true);
+    this.powerupDisplay.textContent = `runner ${runnerTierLabel} | ${shotPutLabel} | ${rocketLabel}`;
+  }
+
+  private updateTimeTrials(snapshot: PlayerPhysicsSnapshot): void {
+    if (!this.timeTrials) {
+      return;
+    }
+    const trial = this.timeTrials.step(snapshot.position, this.elapsed);
+    if (trial.time100mSeconds !== null) {
+      this.time100mSeconds = trial.time100mSeconds;
+    }
+    if (trial.time400mSeconds !== null) {
+      this.time400mSeconds = trial.time400mSeconds;
+    }
+    if (trial.crossed100m && !this.time100mHookFired) {
+      this.time100mHookFired = true;
+      this.achievements.on100mTimeRecorded?.(this.payload(snapshot, undefined, trial.time100mSeconds ?? undefined));
+      if (trial.fast100m && !this.fast100mHookFired) {
+        this.fast100mHookFired = true;
+        this.achievements.onFast100m?.(this.payload(snapshot, undefined, trial.time100mSeconds ?? undefined));
+      }
+    }
+    if (trial.crossed400m && !this.time400mHookFired) {
+      this.time400mHookFired = true;
+      this.achievements.on400mTimeRecorded?.(this.payload(snapshot, undefined, trial.time400mSeconds ?? undefined));
+    }
+  }
+
+  private updateTimeReadout(): void {
+    if (!this.timeDisplay) {
+      return;
+    }
+    const time100 = this.time100mSeconds === null ? '--' : `${this.time100mSeconds.toFixed(2)}s`;
+    const time400 = this.time400mSeconds === null ? '--' : `${this.time400mSeconds.toFixed(2)}s`;
+    this.timeDisplay.textContent = `100m ${time100} | 400m ${time400}`;
+  }
+
+  private updateRocketFuel(snapshot: PlayerPhysicsSnapshot, dt: number, rocketRequested: boolean): void {
+    if (this.rocketFuelCapacityMps <= 0) {
+      return;
+    }
+    if (snapshot.grounded) {
+      this.rocketFuelRemainingMps = this.rocketFuelCapacityMps;
+      return;
+    }
+    if (!rocketRequested || this.rocketFuelRemainingMps <= 0) {
+      return;
+    }
+
+    const burn = Math.min(this.rocketFuelRemainingMps, ROCKET_FUEL_BURN_RATE_METERS_PER_SECOND * dt);
+    this.rocketFuelRemainingMps = Math.max(0, this.rocketFuelRemainingMps - burn);
+    const forward = this.getRocketThrustDirection(snapshot);
+    if (forward.lengthSq() > 0.000001) {
+      this.playerPhysics?.applyVelocityDelta(forward.multiplyScalar(burn));
+    }
+  }
+
+  private getRocketThrustDirection(snapshot: PlayerPhysicsSnapshot): THREE.Vector3 {
+    const radialUp = snapshot.radialUp;
+    const tangentFromHeading = this.heading.clone().projectOnPlane(radialUp);
+    if (tangentFromHeading.lengthSq() > 0.000001) {
+      return tangentFromHeading.normalize();
+    }
+    const tangentFromVelocity = snapshot.velocity.clone().projectOnPlane(radialUp);
+    if (tangentFromVelocity.lengthSq() > 0.000001) {
+      return tangentFromVelocity.normalize();
+    }
+    const fallbackAxis = Math.abs(radialUp.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
+    return new THREE.Vector3().crossVectors(radialUp, fallbackAxis).normalize();
+  }
+
+  private updatePowerups(snapshot: PlayerPhysicsSnapshot): void {
+    if (!this.playerPhysics) {
+      return;
+    }
+    for (const powerup of this.powerups) {
+      if (powerup.collected) {
+        continue;
+      }
+      if (powerup.position.distanceTo(snapshot.position) <= powerup.radius) {
+        powerup.collected = true;
+        powerup.collect();
+        this.applyPowerup(powerup.kind);
+      }
+    }
+  }
+
+  private applyPowerup(kind: TrackPlanetPowerup['kind']): void {
+    switch (kind) {
+      case 'runner-upgrade':
+        this.runnerTier = Math.min(2, this.runnerTier + 1);
+        this.playerPhysics?.setRunnerTier(this.runnerTier);
+        break;
+      case 'shot-put-upgrade':
+        this.shotPutPowerMultiplier = SHOT_PUT_POWERUP_RELEASE_MULTIPLIER;
+        this.throwChargeCap = 1.5;
+        break;
+      case 'rocket-pack':
+        this.rocketFuelCapacityMps = ROCKET_FUEL_MAX_METERS_PER_SECOND;
+        this.rocketFuelRemainingMps = this.rocketFuelCapacityMps;
+        break;
+    }
+  }
+
+  private getRocketFuelLabel(showRange = false): string {
+    if (this.rocketFuelCapacityMps <= 0) {
+      return 'rocket fuel N/A';
+    }
+    if (showRange) {
+      return `rocket fuel ${this.rocketFuelRemainingMps.toFixed(2)} / ${this.rocketFuelCapacityMps.toFixed(2)} m/s`;
+    }
+    return `rocket fuel ${this.rocketFuelRemainingMps.toFixed(2)} m/s`;
   }
 
   private updateSlidingVfx(snapshot: PlayerPhysicsSnapshot, dt: number): void {
@@ -445,6 +622,63 @@ export class TrackPlanetGame {
     const material = this.slideSparkMesh.material as THREE.PointsMaterial;
     material.opacity = this.slideSparks.length > 0 ? 0.95 : 0;
     this.slideSparkMesh.visible = this.slideSparks.length > 0;
+  }
+
+  private updateRocketVfx(snapshot: PlayerPhysicsSnapshot, dt: number, rocketRequested: boolean): void {
+    if (!rocketRequested || snapshot.grounded || this.rocketFuelCapacityMps <= 0 || this.rocketFuelRemainingMps <= 0) {
+      this.stepSparkTrail(this.rocketSparks, this.rocketSparkMesh, snapshot.radialUp, dt);
+      return;
+    }
+
+    const up = snapshot.radialUp;
+    const forward = this.getRocketThrustDirection(snapshot);
+    const right = new THREE.Vector3().crossVectors(forward, up).normalize();
+    const exhaustOrigin = snapshot.position.clone().addScaledVector(up, -0.72).addScaledVector(forward, -0.15);
+    const sparkCount = 3 + Math.round((this.rocketFuelCapacityMps - this.rocketFuelRemainingMps) * 0.2);
+    for (let i = 0; i < sparkCount; i += 1) {
+      const lateral = (Math.random() - 0.5) * 0.45;
+      const offset = right.clone().multiplyScalar(lateral);
+      const position = exhaustOrigin.clone().add(offset).addScaledVector(up, 0.05 + Math.random() * 0.04);
+      const velocity = forward
+        .clone()
+        .multiplyScalar(1.6 + Math.random() * 1.8)
+        .addScaledVector(up, -1.2 - Math.random() * 1.4)
+        .addScaledVector(right, (Math.random() - 0.5) * 0.5);
+      this.rocketSparks.push({ position, velocity, ttl: 0.28 + Math.random() * 0.18 });
+    }
+
+    this.stepSparkTrail(this.rocketSparks, this.rocketSparkMesh, up, dt);
+  }
+
+  private stepSparkTrail(
+    sparks: Array<{ position: THREE.Vector3; velocity: THREE.Vector3; ttl: number }>,
+    mesh: THREE.Points,
+    up: THREE.Vector3,
+    dt: number,
+  ): void {
+    for (const spark of sparks) {
+      spark.ttl -= dt;
+      spark.velocity.addScaledVector(up, -6.5 * dt);
+      spark.position.addScaledVector(spark.velocity, dt);
+      spark.velocity.multiplyScalar(Math.max(0, 1 - 3.4 * dt));
+    }
+
+    while (sparks.length && sparks[0].ttl <= 0) {
+      sparks.shift();
+    }
+
+    const positions = new Float32Array(sparks.length * 3);
+    sparks.forEach((spark, index) => {
+      positions[index * 3] = spark.position.x;
+      positions[index * 3 + 1] = spark.position.y;
+      positions[index * 3 + 2] = spark.position.z;
+    });
+    mesh.geometry.dispose();
+    mesh.geometry = new THREE.BufferGeometry();
+    mesh.geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const material = mesh.material as THREE.PointsMaterial;
+    material.opacity = sparks.length > 0 ? 0.95 : 0;
+    mesh.visible = sparks.length > 0;
   }
 
   private resolveShotPutPlayerCollisions(snapshot: PlayerPhysicsSnapshot): void {
@@ -517,20 +751,34 @@ export class TrackPlanetGame {
   private checkAchievementHooks(snapshot: PlayerPhysicsSnapshot): void {
     if (!this.orbitHookFired && shouldAwardPlayerOrbit(snapshot)) {
       this.orbitHookFired = true;
+      this.playerWasOrbiting = true;
       this.achievements.onPlayerOrbitReached?.(this.payload(snapshot, snapshot.orbitPerigeeAltitude));
     }
     if (!this.escapeHookFired && shouldAwardPlayerEscape(snapshot)) {
       this.escapeHookFired = true;
       this.achievements.onPlayerEscapeReached?.(this.payload(snapshot, snapshot.orbitPerigeeAltitude));
     }
+    if (this.orbitHookFired && !snapshot.grounded && snapshot.orbitPerigeeAltitude > 0) {
+      this.playerWasOrbiting = true;
+    }
+    if (
+      this.playerWasOrbiting &&
+      !this.landingFromOrbitHookFired &&
+      snapshot.grounded &&
+      snapshot.altitudeAboveGround <= 0.03
+    ) {
+      this.landingFromOrbitHookFired = true;
+      this.achievements.onPlayerLandingFromOrbit?.(this.payload(snapshot, snapshot.orbitPerigeeAltitude));
+    }
   }
 
-  private payload(snapshot: PlayerPhysicsSnapshot, orbitPerigeeAltitude?: number): AchievementPayload {
+  private payload(snapshot: PlayerPhysicsSnapshot, orbitPerigeeAltitude?: number, timeSeconds?: number): AchievementPayload {
     return {
       speed: snapshot.speed,
       altitude: snapshot.altitude,
       elapsed: this.elapsed,
       orbitPerigeeAltitude,
+      timeSeconds,
     };
   }
 }

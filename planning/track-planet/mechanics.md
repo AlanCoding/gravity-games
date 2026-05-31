@@ -47,6 +47,17 @@ The important behavior is:
 
 This is the baseline movement model. It is the current “finished mechanics” layer before powerups.
 
+## Timing and distance
+
+Time-based goals use surface distance only.
+
+- measure progress by latitude/longitude movement along the sphere
+- ignore altitude completely
+- use the planet surface path, not straight 3D distance
+- `100 m` is one quarter of the `400 m` circumference, so a quarter-lap time is the correct `100 m` time trial scale
+
+If the player is airborne, the time trial still measures the surface path they are covering, not the height they happen to be at.
+
 ## Orbit and launch behavior
 
 The player and shot put use the same radial gravity model. Orbit should be awarded only when the osculating orbit is actually clear of the surface.
@@ -70,14 +81,19 @@ Sliding is a gameplay state, not a failure state.
 
 Powerups are the next gameplay layer after the baseline mechanics.
 
+Powerups are one-time pickups. The reset button is what clears them for another run.
+
 Planned powerup categories:
 
 - ability level tiers
   - baseline runner
   - high-school runner
   - world-record runner
+  - the runner tier is advanced by two generic runner pickups collected in any order
 - rocket pack
   - pushes the player forward while in air
+  - uses limited fuel
+  - refuels when the player touches the ground again
   - needed for circularization and later orbit-control routes
 - shot put powerups
   - raise release strength above the current 100% cap
@@ -92,6 +108,7 @@ Powerups should be:
 - signed by `-coach`
 
 The billboard text should explain what the pickup is and what it does, without requiring the player to guess.
+The collected-powerup display can live at the bottom of the page rather than in the main gameplay header.
 
 ## Powerup tiers
 
@@ -111,6 +128,8 @@ Suggested tiers:
 
 The ability tiers and the shot put power tiers are related but separate. A strong runner can still have a modest throw, and a throw powerup can exist without changing the runner tier.
 
+Shot put power should start below the eventual final ceiling. The current 100% throw is the baseline for the first gameplay pass; later powerups will allow throws stronger than that, up to roughly 150% of the current baseline.
+
 ## Next phase: achievements
 
 Achievements come after powerups.
@@ -121,6 +140,12 @@ Some achievements will require powerups to be reachable at all. The obvious exam
 - escape
 - shot put orbit
 - shot put escape
+- time-trial goals
+  - `100 m`
+  - `400 m`
+  - cute sub-`9.9` sprint achievement
+
+Time achievements should be based on surface distance around the planet, not altitude. They can be simple binary unlocks even if the on-screen presentation is playful.
 
 The design intent is:
 
