@@ -17,6 +17,7 @@ if (!app) {
 
 const appElement = app;
 let currentGame: RunningGame | null = null;
+let achievementTimeout: number | null = null;
 
 function stopCurrentGame(): void {
   if (currentGame) {
@@ -42,8 +43,29 @@ function startTrackPlanet(): void {
     latitudeDisplay: document.querySelector<HTMLElement>('#latitudeDisplay'),
     altitudeDisplay: document.querySelector<HTMLElement>('#altitudeDisplay'),
     throwDisplay: document.querySelector<HTMLElement>('#throwDisplay'),
+    achievementNotifier: flashAchievement,
   });
   currentGame.start();
+}
+
+function flashAchievement(message: string): void {
+  const toast = document.querySelector<HTMLElement>('#achievementToast');
+  if (!toast) {
+    return;
+  }
+
+  toast.textContent = message;
+  toast.classList.remove('achievement-toast--hide');
+  toast.classList.add('achievement-toast--show');
+
+  if (achievementTimeout !== null) {
+    window.clearTimeout(achievementTimeout);
+  }
+
+  achievementTimeout = window.setTimeout(() => {
+    toast.classList.remove('achievement-toast--show');
+    toast.classList.add('achievement-toast--hide');
+  }, 1700);
 }
 
 function renderIndex(): void {
@@ -80,68 +102,80 @@ function renderTrackPlanet(): void {
   stopCurrentGame();
   appElement.innerHTML = `
     <section class="game-page">
-      <button class="banner-toggle" id="bannerToggle" type="button" aria-expanded="true">Minimize banner</button>
-      <header class="game-banner">
-        <div class="game-banner-art" aria-hidden="true" style="--banner-image: url('${trackPlanetBannerUrl}')"></div>
-        <div class="game-banner-copy">
-          <div class="game-banner-title">
-            <a class="eyebrow game-home-link" href="https://alancoding.github.io/">Gravity Games</a>
-            <h1>Track Planet</h1>
-            <p class="page-copy">Run a track wrapped around a small planet and push things into orbit.</p>
+      <div class="page-actions">
+        <button class="page-action-button" id="resetGameButton" type="button">Reset game</button>
+        <button class="page-action-button banner-toggle" id="bannerToggle" type="button" aria-expanded="true">Minimize banner</button>
+      </div>
+      <div class="achievement-toast" id="achievementToast" aria-live="polite" aria-atomic="true"></div>
+      <div class="game-main">
+        <header class="game-banner">
+          <div class="game-banner-art" aria-hidden="true" style="--banner-image: url('${trackPlanetBannerUrl}')"></div>
+          <div class="game-banner-copy">
+            <div class="game-banner-title">
+              <a class="eyebrow game-home-link" href="https://alancoding.github.io/">Gravity Games</a>
+              <h1>Track Planet</h1>
+              <p class="page-copy">Run a track wrapped around a small planet and push things into orbit.</p>
+            </div>
+            <div class="readout" aria-live="polite">
+              <span id="velocityDisplay">0.0 m/s</span>
+              <span id="orbitalDisplay">orbital 0.0 m/s</span>
+              <span id="throwChargeDisplay">throw charge 0%</span>
+              <span id="longitudeDisplay">lon 0.0</span>
+              <span id="latitudeDisplay">lat 0.0</span>
+              <span id="altitudeDisplay">alt 0.0 m</span>
+            </div>
           </div>
-          <div class="readout" aria-live="polite">
-            <span id="velocityDisplay">0.0 m/s</span>
-            <span id="orbitalDisplay">orbital 0.0 m/s</span>
-            <span id="throwChargeDisplay">throw charge 0%</span>
-            <span id="longitudeDisplay">lon 0.0</span>
-            <span id="latitudeDisplay">lat 0.0</span>
-            <span id="altitudeDisplay">alt 0.0 m</span>
-          </div>
-        </div>
-      </header>
+        </header>
 
-      <div id="gameContainer" class="game-container" tabindex="0"></div>
+        <div id="gameContainer" class="game-container" tabindex="0"></div>
 
-      <section class="controls-panel" aria-labelledby="controlsHeading">
-        <h2 id="controlsHeading">Controls</h2>
-        <dl class="controls-list">
-          <div>
-            <dt>W / A / S / D</dt>
-            <dd>Move</dd>
+        <section class="controls-panel" aria-labelledby="controlsHeading">
+          <h2 id="controlsHeading">Controls</h2>
+          <dl class="controls-list">
+            <div>
+              <dt>W / A / S / D</dt>
+              <dd>Move</dd>
+            </div>
+            <div>
+              <dt>Arrow keys</dt>
+              <dd>Turn on the ground; orbit the camera in the air and adjust pitch</dd>
+            </div>
+            <div>
+              <dt>Space</dt>
+              <dd>Jump</dd>
+            </div>
+            <div>
+              <dt>Hold F</dt>
+              <dd>Charge a shot put throw, then release to throw</dd>
+            </div>
+            <div>
+              <dt>P</dt>
+              <dd>Spawn a pole vault pole</dd>
+            </div>
+          </dl>
+          <div class="throw-panel">
+            <h2>Throw Stats</h2>
+            <p id="throwDisplay">throw charge 0%</p>
           </div>
-          <div>
-            <dt>Arrow keys</dt>
-            <dd>Turn and adjust camera pitch</dd>
-          </div>
-          <div>
-            <dt>Space</dt>
-            <dd>Jump</dd>
-          </div>
-          <div>
-            <dt>Hold F</dt>
-            <dd>Charge a shot put throw, then release to throw</dd>
-          </div>
-          <div>
-            <dt>P</dt>
-            <dd>Spawn a pole</dd>
-          </div>
-        </dl>
-        <div class="throw-panel">
-          <h2>Throw Stats</h2>
-          <p id="throwDisplay">throw charge 0%</p>
-        </div>
-      </section>
+        </section>
+      </div>
     </section>
   `;
   startTrackPlanet();
 
   const bannerToggle = document.querySelector<HTMLButtonElement>('#bannerToggle');
+  const resetGameButton = document.querySelector<HTMLButtonElement>('#resetGameButton');
   const gamePage = document.querySelector<HTMLElement>('.game-page');
   if (bannerToggle && gamePage) {
     bannerToggle.addEventListener('click', () => {
       const collapsed = gamePage.classList.toggle('banner-collapsed');
       bannerToggle.textContent = collapsed ? 'Expand banner' : 'Minimize banner';
       bannerToggle.setAttribute('aria-expanded', String(!collapsed));
+    });
+  }
+  if (resetGameButton) {
+    resetGameButton.addEventListener('click', () => {
+      renderTrackPlanet();
     });
   }
 }

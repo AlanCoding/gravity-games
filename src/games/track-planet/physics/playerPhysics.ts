@@ -1,11 +1,12 @@
 import * as THREE from 'three';
 import { RAPIER, type RapierPhysicsWorld } from '../../../engine/physics/rapierWorld';
-import { computePlanetGravity, getRadialUp } from './gravity';
+import { computeOrbitMetrics, computePlanetGravity, getRadialUp } from './gravity';
 
 export type PlayerPhysicsInput = {
   dt: number;
   desiredTangentVelocity: THREE.Vector3;
   jumpRequested: boolean;
+  poleVaultRequested: boolean;
 };
 
 export type PlayerPhysicsSnapshot = {
@@ -20,6 +21,7 @@ export type PlayerPhysicsSnapshot = {
   groundHeight: number;
   orbitalSpeed: number;
   escapeSpeed: number;
+  orbitPerigeeAltitude: number;
 };
 
 export class PlayerPhysics {
@@ -85,7 +87,11 @@ export class PlayerPhysics {
     }
 
     if (input.jumpRequested && (this.grounded || !this.airborneJumpConsumed)) {
-      this.applyJump();
+      if (input.poleVaultRequested) {
+        this.applyPoleVault();
+      } else {
+        this.applyJump();
+      }
     }
 
     if (!this.grounded) {
@@ -123,6 +129,12 @@ export class PlayerPhysics {
       groundHeight,
       orbitalSpeed: Math.sqrt(this.mu / distance),
       escapeSpeed: Math.sqrt((2 * this.mu) / distance),
+      orbitPerigeeAltitude: computeOrbitMetrics({
+        position: this.position,
+        velocity: this.velocity,
+        planetRadius: this.options.planetRadius,
+        surfaceGravity: this.options.surfaceGravity,
+      }).perigeeAltitude,
     };
   }
 
@@ -151,6 +163,20 @@ export class PlayerPhysics {
       this.velocity.addScaledVector(radialUp, -radialVelocity);
     }
     this.velocity.addScaledVector(radialUp, this.options.jumpSpeed);
+    this.grounded = false;
+    this.airborneJumpConsumed = true;
+    this.jumpedThisStep = true;
+  }
+
+  private applyPoleVault(): void {
+    const radialUp = getRadialUp(this.position);
+    const tangentVelocity = this.velocity.clone().projectOnPlane(radialUp);
+    const tangentSpeed = tangentVelocity.length();
+    const tangentCarry = tangentSpeed * 0.15;
+    const vaultBoost = this.options.jumpSpeed * 5.5 + tangentSpeed * 2.9 + 4.2;
+    const carryDirection = tangentSpeed > 0.0001 ? tangentVelocity.normalize() : new THREE.Vector3();
+
+    this.velocity.copy(carryDirection.multiplyScalar(tangentCarry)).addScaledVector(radialUp, vaultBoost);
     this.grounded = false;
     this.airborneJumpConsumed = true;
     this.jumpedThisStep = true;

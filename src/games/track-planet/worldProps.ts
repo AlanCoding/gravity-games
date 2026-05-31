@@ -11,6 +11,7 @@ import { RAMP_CONFIG, getRampLongitudeDeg } from './rampConfig';
 export function addWorldProps(scene: THREE.Scene, planetRadius: number): THREE.Object3D {
   addStartingBleachers(scene, planetRadius);
   addRamp(scene, planetRadius);
+  addTrackAndFieldMarkers(scene, planetRadius);
   addFootballFieldMarkers(scene, planetRadius);
   addPlacementTestMarkers(scene, planetRadius);
   scene.add(createStars());
@@ -25,6 +26,110 @@ export function addWorldProps(scene: THREE.Scene, planetRadius: number): THREE.O
   });
   scene.add(rotatingObject);
   return rotatingObject;
+}
+
+function addTrackAndFieldMarkers(scene: THREE.Scene, planetRadius: number): void {
+  addShotPutMarkers(scene, planetRadius);
+  addLongJumpMarkers(scene, planetRadius);
+  addPoleVaultMarkers(scene, planetRadius);
+}
+
+function addShotPutMarkers(scene: THREE.Scene, planetRadius: number): void {
+  const group = createPlacedGroup({
+    planetRadius,
+    longitudeDeg: 160,
+    latitudeDeg: -18,
+    altitude: 0.13,
+    headingDeg: 90,
+  });
+  const whiteMaterial = new THREE.MeshStandardMaterial({ color: 0xf2f7f3, emissive: 0x2b2d2b, roughness: 0.58 });
+  const sectorMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x191919, roughness: 0.6 });
+  const square = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.12, 3.2), whiteMaterial);
+  square.position.y = 0.06;
+  group.add(square);
+
+  const sector = createGroundTriangle(12, 18, sectorMaterial);
+  sector.position.set(0, 0.05, 8.5);
+  group.add(sector);
+
+  const standLine = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.1, 0.22), whiteMaterial);
+  standLine.position.set(0, 0.07, 1.8);
+  group.add(standLine);
+
+  scene.add(group);
+}
+
+function addLongJumpMarkers(scene: THREE.Scene, planetRadius: number): void {
+  const group = createPlacedGroup({
+    planetRadius,
+    longitudeDeg: 196,
+    latitudeDeg: -18,
+    altitude: 0.13,
+    headingDeg: 90,
+  });
+  const runwayMaterial = new THREE.MeshStandardMaterial({ color: 0xb3a18a, emissive: 0x20170f, roughness: 0.7 });
+  const boardMaterial = new THREE.MeshStandardMaterial({ color: 0xf2f7f3, emissive: 0x2b2d2b, roughness: 0.58 });
+  const pitMaterial = new THREE.MeshStandardMaterial({ color: 0xd8c19a, emissive: 0x271c10, roughness: 0.82 });
+
+  const runway = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.1, 26), runwayMaterial);
+  runway.position.y = 0.05;
+  group.add(runway);
+
+  const board = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.12, 0.36), boardMaterial);
+  board.position.set(0, 0.08, 8.8);
+  group.add(board);
+
+  const pit = new THREE.Mesh(new THREE.BoxGeometry(8.5, 0.08, 5.2), pitMaterial);
+  pit.position.set(0, 0.04, 13.6);
+  group.add(pit);
+
+  scene.add(group);
+}
+
+function addPoleVaultMarkers(scene: THREE.Scene, planetRadius: number): void {
+  const group = createPlacedGroup({
+    planetRadius,
+    longitudeDeg: 232,
+    latitudeDeg: -18,
+    altitude: 0.13,
+    headingDeg: 90,
+  });
+  const runwayMaterial = new THREE.MeshStandardMaterial({ color: 0x7e8f8d, emissive: 0x151c1b, roughness: 0.72 });
+  const boxMaterial = new THREE.MeshStandardMaterial({ color: 0xf2f7f3, emissive: 0x2b2d2b, roughness: 0.58 });
+  const barMaterial = new THREE.MeshStandardMaterial({ color: 0xe5c97c, emissive: 0x2b210c, roughness: 0.46 });
+
+  const runway = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.1, 24), runwayMaterial);
+  runway.position.y = 0.05;
+  group.add(runway);
+
+  const plantBox = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.12, 1.3), boxMaterial);
+  plantBox.position.set(0, 0.08, 8.0);
+  group.add(plantBox);
+
+  const leftStandard = new THREE.Mesh(new THREE.BoxGeometry(0.18, 4.3, 0.18), barMaterial);
+  leftStandard.position.set(-2.1, 2.15, 10.7);
+  group.add(leftStandard);
+
+  const rightStandard = new THREE.Mesh(new THREE.BoxGeometry(0.18, 4.3, 0.18), barMaterial);
+  rightStandard.position.set(2.1, 2.15, 10.7);
+  group.add(rightStandard);
+
+  const crossBar = new THREE.Mesh(new THREE.BoxGeometry(4.3, 0.12, 0.12), barMaterial);
+  crossBar.position.set(0, 3.05, 10.7);
+  group.add(crossBar);
+
+  scene.add(group);
+}
+
+function createGroundTriangle(width: number, length: number, material: THREE.Material): THREE.Mesh {
+  const shape = new THREE.Shape();
+  shape.moveTo(-width / 2, 0);
+  shape.lineTo(width / 2, 0);
+  shape.lineTo(0, length);
+  shape.closePath();
+  const mesh = new THREE.Mesh(new THREE.ShapeGeometry(shape), material);
+  mesh.rotation.x = -Math.PI / 2;
+  return mesh;
 }
 
 function addRamp(scene: THREE.Scene, planetRadius: number): void {

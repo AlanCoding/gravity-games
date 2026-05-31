@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RAPIER, type RapierPhysicsWorld } from '../../../engine/physics/rapierWorld';
-import { computePlanetGravity } from './gravity';
+import { computeOrbitMetrics } from './gravity';
 
 export class ProjectilePhysics {
   readonly body: RAPIER.RigidBody;
@@ -10,6 +10,8 @@ export class ProjectilePhysics {
 
   maxAltitude = 0;
   bounceCount = 0;
+  orbitAchievementFired = false;
+  escapeAchievementFired = false;
 
   constructor(
     private readonly rapier: RapierPhysicsWorld,
@@ -29,6 +31,7 @@ export class ProjectilePhysics {
     this.startTime = options.startTime;
     this.body = this.rapier.createDynamicBody(options.position, { linearDamping: 0.01, angularDamping: 0.05 });
     this.body.setLinvel({ x: options.velocity.x, y: options.velocity.y, z: options.velocity.z }, true);
+    this.body.enableCcd(true);
     this.collider = this.rapier.world.createCollider(
       RAPIER.ColliderDesc.ball(options.radius)
         .setDensity(options.mass / ((4 / 3) * Math.PI * options.radius ** 3))
@@ -40,13 +43,15 @@ export class ProjectilePhysics {
   }
 
   beforePhysicsStep(): void {
-    const gravity = computePlanetGravity({
-      position: this.getPosition(),
-      planetRadius: this.options.planetRadius,
-      surfaceGravity: this.options.surfaceGravity,
-    });
+    const position = this.getPosition();
+    const fromCenter = position.clone();
+    const distance = Math.max(fromCenter.length(), this.options.planetRadius + this.options.radius * 0.9);
+    const gravityDirection = fromCenter.lengthSq() > 0.000001 ? fromCenter.normalize() : this.startUp.clone();
+    const mu = this.options.surfaceGravity * this.options.planetRadius * this.options.planetRadius;
+    const gravity = gravityDirection.multiplyScalar(-mu / (distance * distance));
     this.body.addForce({ x: gravity.x * this.body.mass(), y: gravity.y * this.body.mass(), z: gravity.z * this.body.mass() }, true);
-    this.maxAltitude = Math.max(this.maxAltitude, this.getAltitude());
+    this.applyAtmosphericDrag(position);
+    this.maxAltitude = Math.max(this.maxAltitude, position.length() - this.options.planetRadius - this.options.radius);
   }
 
   getPosition(): THREE.Vector3 {
@@ -67,5 +72,32 @@ export class ProjectilePhysics {
     const currentUp = this.getPosition().clone().normalize();
     const angle = Math.acos(THREE.MathUtils.clamp(this.startUp.dot(currentUp), -1, 1));
     return angle * this.options.planetRadius;
+  }
+
+  getOrbitMetrics(): ReturnType<typeof computeOrbitMetrics> {
+    return computeOrbitMetrics({
+      position: this.getPosition(),
+      velocity: this.getVelocity(),
+      planetRadius: this.options.planetRadius,
+      surfaceGravity: this.options.surfaceGravity,
+    });
+  }
+
+  private applyAtmosphericDrag(position: THREE.Vector3): void {
+    const velocity = this.getVelocity();
+    const speed = velocity.length();
+    if (speed < 0.001) {
+      return;
+    }
+
+    const altitude = Math.max(0, position.length() - this.options.planetRadius - this.options.radius);
+    const atmosphereFactor = Math.pow(THREE.MathUtils.clamp(1 - altitude / 120, 0, 1), 2);
+    if (atmosphereFactor <= 0) {
+      return;
+    }
+
+    const dragCoefficient = 0.02 * atmosphereFactor;
+    const dragForce = velocity.normalize().multiplyScalar(-dragCoefficient * speed * speed * this.body.mass());
+    this.body.addForce({ x: dragForce.x, y: dragForce.y, z: dragForce.z }, true);
   }
 }

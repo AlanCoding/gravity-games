@@ -58,6 +58,7 @@ export class TrackPlanetGame {
   private pole: Pole | null = null;
   private heading = TRACK_START_FORWARD.clone();
   private cameraPitch = 0.24;
+  private cameraOrbitYaw = 0;
   private animationHandle = 0;
   private elapsed = 0;
   private lastGroundedTime = 0;
@@ -67,7 +68,6 @@ export class TrackPlanetGame {
   private firstThrowFired = false;
   private tenSecondAirtimeFired = false;
   private orbitThrowFired = false;
-  private escapeThrowFired = false;
   private bounceFiveFired = false;
   private orbitHookFired = false;
   private escapeHookFired = false;
@@ -142,6 +142,7 @@ export class TrackPlanetGame {
 
     const desiredTangentVelocity = this.getDesiredTangentVelocity(snapshotBefore);
     const jumpRequested = this.shouldJump(snapshotBefore);
+    const poleVaultRequested = jumpRequested && Boolean(this.pole);
     const wasThrowPressed = this.throwWasPressed;
     this.updateThrowCharge(dt);
     this.rapier.step(dt, fixedDt => {
@@ -149,6 +150,7 @@ export class TrackPlanetGame {
         dt: fixedDt,
         desiredTangentVelocity,
         jumpRequested,
+        poleVaultRequested,
       });
       for (const shotPut of this.shotPuts) {
         shotPut.physics.beforePhysicsStep();
@@ -162,6 +164,10 @@ export class TrackPlanetGame {
     this.transportHeading(snapshotBefore.radialUp, snapshot.radialUp);
 
     if (snapshot.jumped) {
+      if (poleVaultRequested) {
+        this.pole?.dispose(this.rapier);
+        this.pole = null;
+      }
       this.lastJumpPressedTime = Number.NEGATIVE_INFINITY;
       this.lastGroundedTime = Number.NEGATIVE_INFINITY;
       this.achievements.onJump?.(this.payload(snapshot));
@@ -244,6 +250,7 @@ export class TrackPlanetGame {
     const right = new THREE.Vector3().crossVectors(snapshot.radialUp, forward).normalize();
     const position = snapshot.position.clone().addScaledVector(snapshot.radialUp, 1).addScaledVector(right, 1.6);
     const orientation = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, snapshot.radialUp, forward));
+    orientation.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -0.55));
     this.pole = new Pole({ scene: this.world.scene, rapier: this.rapier, position, orientation });
   }
 
@@ -298,8 +305,14 @@ export class TrackPlanetGame {
   private updateAim(snapshot: PlayerPhysicsSnapshot, dt: number): void {
     const up = snapshot.radialUp;
     const turn = Number(this.input.isPressed('ArrowLeft')) - Number(this.input.isPressed('ArrowRight'));
-    if (turn !== 0) {
+    if (snapshot.grounded && turn !== 0) {
       this.heading.applyAxisAngle(up, turn * TURN_RATE * dt).projectOnPlane(up).normalize();
+    }
+    if (!snapshot.grounded && turn !== 0) {
+      this.cameraOrbitYaw += turn * TURN_RATE * dt;
+    }
+    if (snapshot.grounded) {
+      this.cameraOrbitYaw = THREE.MathUtils.lerp(this.cameraOrbitYaw, 0, 0.12);
     }
     if (this.input.isPressed('ArrowUp')) {
       this.cameraPitch = Math.min(0.78, this.cameraPitch + 1.4 * dt);
@@ -353,10 +366,11 @@ export class TrackPlanetGame {
   private updateCamera(snapshot: PlayerPhysicsSnapshot, immediate = false): void {
     const up = snapshot.radialUp;
     const forward = this.heading.clone().projectOnPlane(up).normalize();
+    const orbitForward = forward.clone().applyAxisAngle(up, this.cameraOrbitYaw).normalize();
     const target = snapshot.position.clone().addScaledVector(up, 1.4);
     const chase = target
       .clone()
-      .addScaledVector(forward, -18)
+      .addScaledVector(orbitForward, -18)
       .addScaledVector(up, 10 + Math.sin(this.cameraPitch) * 12);
     if (immediate) {
       this.world.camera.position.copy(chase);
@@ -364,7 +378,7 @@ export class TrackPlanetGame {
       this.world.camera.position.lerp(chase, 0.22);
     }
     this.world.camera.up.copy(up);
-    this.world.camera.lookAt(target.clone().addScaledVector(forward, 12));
+    this.world.camera.lookAt(target);
   }
 
   private updateReadout(snapshot: PlayerPhysicsSnapshot): void {
@@ -418,50 +432,59 @@ export class TrackPlanetGame {
   }
 
   private checkThrowHooks(snapshot: PlayerPhysicsSnapshot): void {
-    const shotPut = this.latestShotPut;
-    if (!shotPut) {
-      return;
-    }
-    const airtime = this.elapsed - shotPut.physics.startTime;
-    const throwSpeed = shotPut.physics.getVelocity().length();
-    if (this.firstThrowFired) {
-      this.firstThrowFired = false;
-      console.info('Track Planet event: first throw');
-    }
-    if (!this.tenSecondAirtimeFired && airtime >= 10) {
-      this.tenSecondAirtimeFired = true;
-      console.info('Track Planet event: 10 second airtime');
-    }
-    if (!this.orbitThrowFired && shotPut.physics.getSurfaceDistance() >= PLANET_CIRCUMFERENCE_METERS) {
-      this.orbitThrowFired = true;
-      console.info('Track Planet event: complete one orbit throw');
-    }
-    if (!this.escapeThrowFired && throwSpeed >= snapshot.escapeSpeed) {
-      this.escapeThrowFired = true;
-      console.info('Track Planet event: escape velocity throw');
-    }
-    if (!this.bounceFiveFired && shotPut.physics.bounceCount >= 5) {
-      this.bounceFiveFired = true;
-      console.info('Track Planet event: bounce 5 times');
+    let firstThrowSeen = false;
+    for (const shotPut of this.shotPuts) {
+      if (!firstThrowSeen) {
+        firstThrowSeen = true;
+        if (this.firstThrowFired) {
+          this.firstThrowFired = false;
+          console.info('Track Planet event: first throw');
+        }
+      }
+
+      const airtime = this.elapsed - shotPut.physics.startTime;
+      if (!this.tenSecondAirtimeFired && airtime >= 10) {
+        this.tenSecondAirtimeFired = true;
+        console.info('Track Planet event: 10 second airtime');
+      }
+      if (!this.orbitThrowFired && shotPut.physics.getSurfaceDistance() >= PLANET_CIRCUMFERENCE_METERS) {
+        this.orbitThrowFired = true;
+        console.info('Track Planet event: complete one orbit throw');
+      }
+
+      const orbitMetrics = shotPut.physics.getOrbitMetrics();
+      if (!shotPut.physics.orbitAchievementFired && orbitMetrics.boundOrbit && orbitMetrics.perigeeAltitude > 0) {
+        shotPut.physics.orbitAchievementFired = true;
+        this.achievements.onShotPutOrbitReached?.(this.payload(snapshot, orbitMetrics.perigeeAltitude));
+      }
+      if (!shotPut.physics.escapeAchievementFired && !orbitMetrics.boundOrbit) {
+        shotPut.physics.escapeAchievementFired = true;
+        this.achievements.onShotPutEscapeReached?.(this.payload(snapshot, orbitMetrics.perigeeAltitude));
+      }
+      if (!this.bounceFiveFired && shotPut.physics.bounceCount >= 5) {
+        this.bounceFiveFired = true;
+        console.info('Track Planet event: bounce 5 times');
+      }
     }
   }
 
   private checkAchievementHooks(snapshot: PlayerPhysicsSnapshot): void {
-    if (!this.orbitHookFired && snapshot.speed >= snapshot.orbitalSpeed) {
+    if (!this.orbitHookFired && snapshot.orbitPerigeeAltitude > 0) {
       this.orbitHookFired = true;
-      this.achievements.onOrbitSpeedReached?.(this.payload(snapshot));
+      this.achievements.onPlayerOrbitReached?.(this.payload(snapshot, snapshot.orbitPerigeeAltitude));
     }
-    if (!this.escapeHookFired && snapshot.speed >= snapshot.escapeSpeed) {
+    if (!this.escapeHookFired && snapshot.speed >= snapshot.escapeSpeed && snapshot.altitude > 0) {
       this.escapeHookFired = true;
-      this.achievements.onEscapeSpeedReached?.(this.payload(snapshot));
+      this.achievements.onPlayerEscapeReached?.(this.payload(snapshot, snapshot.orbitPerigeeAltitude));
     }
   }
 
-  private payload(snapshot: PlayerPhysicsSnapshot): AchievementPayload {
+  private payload(snapshot: PlayerPhysicsSnapshot, orbitPerigeeAltitude?: number): AchievementPayload {
     return {
       speed: snapshot.speed,
       altitude: snapshot.altitude,
       elapsed: this.elapsed,
+      orbitPerigeeAltitude,
     };
   }
 }
