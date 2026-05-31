@@ -1,10 +1,12 @@
 # Track Planet Mechanics
 
-Track Planet is a spherical-track running game on a 400 m circumference planet. The current first-pass mechanics are implemented. The next phase is powerups, then achievements.
+Track Planet is a spherical-track running game on a 400 m circumference planet. According to the current objectives,
+the core game is mostly finished. The baseline mechanics, powerups, time trials, rocket pack, shot put, pole vault,
+and achievement hooks are implemented. Remaining work should be treated as debugging, tuning, and presentation polish.
 
-Working subtitle for the page:
+Current subtitle for the page:
 
-- `pole vault and throw shot put balls into orbit`
+- `Pole vault, throw shot put balls into orbit, rocket into oblivion.`
 
 Core idea:
 
@@ -12,7 +14,7 @@ Core idea:
 - the normal force changes with speed
 - sliding appears when the runner asks for more lateral or tangential acceleration than the ground can support
 - the player can pole-vault and throw shot puts into orbit
-- later powerups will push the player into orbit and escape conditions
+- one-shot powerups push the player toward orbit and escape conditions
 
 ## Baseline geometry
 
@@ -45,7 +47,7 @@ The important behavior is:
 - if the requested turn or drive exceeds static traction, the runner slides
 - if no movement input is held, the runner is a passive block and slows under kinetic friction
 
-This is the baseline movement model. It is the current “finished mechanics” layer before powerups.
+This is the baseline movement model. It is part of the finished core mechanics layer.
 
 ## Timing and distance
 
@@ -77,13 +79,11 @@ Sliding is a gameplay state, not a failure state.
 - turning can trigger it even when straight-line speed is still acceptable
 - it should obey the kinetic coefficient once active
 
-## Next phase: powerups
+## Powerups
 
-Powerups are the next gameplay layer after the baseline mechanics.
+Powerups are implemented as one-time pickups. The reset button clears them for another run.
 
-Powerups are one-time pickups. The reset button is what clears them for another run.
-
-Planned powerup categories:
+Current powerup categories:
 
 - ability level tiers
   - baseline runner
@@ -94,25 +94,25 @@ Planned powerup categories:
   - pushes the player forward while in air
   - uses limited fuel
   - refuels when the player touches the ground again
-  - needed for circularization and later orbit-control routes
+  - supports circularization and orbit-control routes
 - shot put powerups
   - raise release strength above the current 100% cap
   - current 100% becomes the pre-powerup baseline
   - later 150% is the stronger post-powerup ceiling
 
-Powerups should be:
+Powerups are intended to be:
 
 - placed directly on the planet surface
 - visually obvious
-- labeled with simple billboard text
+- labeled with simple physical billboard-wall text
 - signed by `-coach`
 
 The billboard text should explain what the pickup is and what it does, without requiring the player to guess.
-The collected-powerup display can live at the bottom of the page rather than in the main gameplay header.
+The collected-powerup display lives at the bottom of the page rather than in the main gameplay header.
 
 ## Powerup tiers
 
-Later powerups can raise:
+Powerups can raise:
 
 - baseline drive acceleration
 - reference speed
@@ -128,16 +128,16 @@ Suggested tiers:
 
 The ability tiers and the shot put power tiers are related but separate. A strong runner can still have a modest throw, and a throw powerup can exist without changing the runner tier.
 
-Shot put power should start below the eventual final ceiling. The current 100% throw is the baseline for the first gameplay pass; later powerups will allow throws stronger than that, up to roughly 150% of the current baseline.
+Shot put power starts below the final ceiling. The pre-powerup 100% throw is the baseline; the shot put powerup allows
+throws up to roughly 150% of that baseline.
 
-## Next phase: achievements
+## Achievements
 
-Achievements come after powerups.
-
-Some achievements will require powerups to be reachable at all. The obvious examples are:
+Achievements are implemented as simple binary unlocks. Some achievements require powerups to be reachable. The core set includes:
 
 - orbit
 - escape
+- coming in for landing after orbit
 - shot put orbit
 - shot put escape
 - time-trial goals
@@ -147,13 +147,14 @@ Some achievements will require powerups to be reachable at all. The obvious exam
 
 Time achievements should be based on surface distance around the planet, not altitude. They can be simple binary unlocks even if the on-screen presentation is playful.
 
-The design intent is:
+The current completion state is:
 
-- first finish the mechanics
-- then place powerups on the planet
-- then tune achievements against those powerups
-- then tune the collectible economy around the achievement targets
+- mechanics are in place
+- powerups are in place
+- achievements are in place
+- remaining work is tuning, bug fixing, and minor presentation cleanup
 
 ## Temporary notes
 
-Pole vault has a separate temporary plan while the mechanic is still being shaped. See [pole-vault-temp.md](pole-vault-temp.md).
+The first pole-vault iteration is complete. The temporary note remains only as a record of the simplified model. See
+[pole-vault-temp.md](pole-vault-temp.md).

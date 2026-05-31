@@ -1,8 +1,9 @@
-# Track Planet Pole Vault Temporary Plan
+# Track Planet Pole Vault Temporary Note
 
-This is a temporary note for the current pole-vault refactor.
+This is a historical note for the simplified pole-vault mechanic. The first implementation is complete and belongs to
+the mostly finished Track Planet core game.
 
-## Desired behavior
+## Implemented behavior
 
 - pressing the pole-vault control should not trigger an immediate launch
 - the runner should follow an arc while the pole vault is converting horizontal motion into vertical motion
@@ -13,10 +14,10 @@ This is a temporary note for the current pole-vault refactor.
 - the conversion should only be available while the runner is on the surface
 - if the runner hits the ground during the conversion, the vault ends
 
-## Temporary implementation idea
+## Implementation model
 
-- spawn a lazy cylinder pole beside the runner
-- keep it attached while the vault is charging
+- spawn a simple cylinder pole beside the runner
+- keep it visible while horizontal velocity is being converted
 - gradually shift the player’s velocity from tangent to vertical
 - only finish the vault once the conversion completes
 - remove the pole prop after the vault resolves
@@ -27,6 +28,7 @@ This is a temporary note for the current pole-vault refactor.
 - do not add bending pole behavior yet
 - do not make the pole itself control the launch by collision
 
-## Exit condition
+## Status
 
-This note should be removed or replaced once the pole vault mechanic is integrated into the broader powerup and achievement loop. The first iteration of the basic pole-vault mechanic is now considered complete.
+The first iteration of the basic pole-vault mechanic is complete. Future work should only revisit this file if the
+mechanic is being redesigned, for example with a more physical pole or a different input model.
