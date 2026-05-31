@@ -73,7 +73,6 @@ export class ShotPutMotion {
       const step = Math.min(maxStep, remaining);
       const previousPosition = this.position.clone();
       this.applyPlanetGravity(step);
-      this.applyAtmosphericDrag(step);
       this.position.addScaledVector(this.velocity, step);
       this.resolvePlanetContact(previousPosition, step);
       this.maxAltitude = Math.max(this.maxAltitude, this.getAltitude());
@@ -205,39 +204,6 @@ export class ShotPutMotion {
     });
   }
 
-  willTouchSurfaceWithin(seconds: number): boolean {
-    if (seconds <= 0) {
-      return this.hasTouchedSurface || this.resting;
-    }
-
-    const clone = new ShotPutMotion({
-      position: this.position.clone(),
-      velocity: this.velocity.clone(),
-      radius: this.options.radius,
-      mass: this.options.mass,
-      planetRadius: this.options.planetRadius,
-      surfaceGravity: this.options.surfaceGravity,
-      restitution: this.options.restitution,
-      friction: this.options.friction,
-      startTime: this.startTime,
-      atmosphereHeight: this.options.atmosphereHeight,
-      dragCoefficient: this.options.dragCoefficient,
-      restingSpeed: this.options.restingSpeed,
-    });
-    clone.hasTouchedSurface = this.hasTouchedSurface;
-    clone.resting = this.resting;
-
-    let elapsed = 0;
-    const maxStep = 1 / 120;
-    while (elapsed < seconds && !clone.hasTouchedSurface && !clone.resting) {
-      const step = Math.min(maxStep, seconds - elapsed);
-      clone.step(step);
-      elapsed += step;
-    }
-
-    return clone.hasTouchedSurface || clone.resting;
-  }
-
   private applyPlanetGravity(dt: number): void {
     const fromCenter = this.position.clone();
     const distance = Math.max(fromCenter.length(), this.options.planetRadius + this.options.radius * 0.9);
@@ -245,24 +211,6 @@ export class ShotPutMotion {
     const mu = this.options.surfaceGravity * this.options.planetRadius * this.options.planetRadius;
     const gravity = gravityDirection.multiplyScalar(-mu / (distance * distance));
     this.velocity.addScaledVector(gravity, dt);
-  }
-
-  private applyAtmosphericDrag(dt: number): void {
-    const speed = this.velocity.length();
-    if (speed < 0.001) {
-      return;
-    }
-
-    const altitude = Math.max(0, this.getAltitude());
-    const atmosphereHeight = this.options.atmosphereHeight ?? 120;
-    const atmosphereFactor = Math.pow(THREE.MathUtils.clamp(1 - altitude / atmosphereHeight, 0, 1), 2);
-    if (atmosphereFactor <= 0) {
-      return;
-    }
-
-    const dragCoefficient = this.options.dragCoefficient ?? 0.02;
-    const dragAccel = dragCoefficient * atmosphereFactor * speed * speed / Math.max(this.options.mass, 0.001);
-    this.velocity.addScaledVector(this.velocity.clone().normalize(), -dragAccel * dt);
   }
 
   private resolvePlanetContact(previousPosition: THREE.Vector3, dt: number): void {
