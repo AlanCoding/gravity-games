@@ -48,6 +48,26 @@ describe('ShotPutMotion', () => {
     expect(latitudeDegrees(position)).toBeLessThanOrEqual(1);
   });
 
+  it('predicts a future surface contact for a shallow launch', () => {
+    const radius = 0.42;
+    const motion = new ShotPutMotion({
+      position: new THREE.Vector3(PLANET_RADIUS_METERS + radius + 0.05, 0, 0),
+      velocity: new THREE.Vector3(1.8, 0, 0.22),
+      radius,
+      mass: 7.26,
+      planetRadius: PLANET_RADIUS_METERS,
+      surfaceGravity: SURFACE_GRAVITY,
+      restitution: 0.42,
+      friction: 0.72,
+      startTime: 0,
+      atmosphereHeight: 120,
+      dragCoefficient: 0.028,
+      restingSpeed: 0.1,
+    });
+
+    expect(motion.willTouchSurfaceWithin(20)).toBe(true);
+  });
+
   it('bounces off the planet at higher impact speed', () => {
     const radius = 0.42;
     const surfaceRadius = PLANET_RADIUS_METERS + radius;

@@ -13,6 +13,7 @@ import {
   PLAYER_RUN_REFERENCE_SPEED_METERS_PER_SECOND,
   PLAYER_STATIC_FRICTION_COEFFICIENT,
   SHADOW_MAX_ALTITUDE_METERS,
+  SHOT_PUT_ORBIT_LOOKAHEAD_SECONDS,
   SHADOW_SURFACE_OFFSET_METERS,
   SURFACE_GRAVITY,
   TRACK_START_FORWARD,
@@ -494,7 +495,7 @@ export class TrackPlanetGame {
         perigeeDistance: orbitMetrics.perigeeDistance,
         minimumPerigeeDistance: PLANET_RADIUS_METERS + 0.42,
         hasTouchedSurface: shotPut.physics.hasTouchedSurface,
-      })) {
+      }) && !shotPut.physics.willTouchSurfaceWithin(SHOT_PUT_ORBIT_LOOKAHEAD_SECONDS)) {
         shotPut.physics.orbitAchievementFired = true;
         this.achievements.onShotPutOrbitReached?.(this.payload(snapshot, orbitMetrics.perigeeAltitude));
       }

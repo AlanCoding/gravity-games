@@ -50,6 +50,10 @@ export class ProjectilePhysics {
     return this.motion.getOrbitMetrics();
   }
 
+  willTouchSurfaceWithin(seconds: number): boolean {
+    return this.motion.willTouchSurfaceWithin(seconds);
+  }
+
   get maxAltitude(): number {
     return this.motion.maxAltitude;
   }

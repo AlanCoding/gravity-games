@@ -205,6 +205,39 @@ export class ShotPutMotion {
     });
   }
 
+  willTouchSurfaceWithin(seconds: number): boolean {
+    if (seconds <= 0) {
+      return this.hasTouchedSurface || this.resting;
+    }
+
+    const clone = new ShotPutMotion({
+      position: this.position.clone(),
+      velocity: this.velocity.clone(),
+      radius: this.options.radius,
+      mass: this.options.mass,
+      planetRadius: this.options.planetRadius,
+      surfaceGravity: this.options.surfaceGravity,
+      restitution: this.options.restitution,
+      friction: this.options.friction,
+      startTime: this.startTime,
+      atmosphereHeight: this.options.atmosphereHeight,
+      dragCoefficient: this.options.dragCoefficient,
+      restingSpeed: this.options.restingSpeed,
+    });
+    clone.hasTouchedSurface = this.hasTouchedSurface;
+    clone.resting = this.resting;
+
+    let elapsed = 0;
+    const maxStep = 1 / 120;
+    while (elapsed < seconds && !clone.hasTouchedSurface && !clone.resting) {
+      const step = Math.min(maxStep, seconds - elapsed);
+      clone.step(step);
+      elapsed += step;
+    }
+
+    return clone.hasTouchedSurface || clone.resting;
+  }
+
   private applyPlanetGravity(dt: number): void {
     const fromCenter = this.position.clone();
     const distance = Math.max(fromCenter.length(), this.options.planetRadius + this.options.radius * 0.9);
