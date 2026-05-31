@@ -17,6 +17,22 @@ describe('computeShotPutReleaseVelocity', () => {
     expect(release.dot(forward)).toBeGreaterThan(5.5);
   });
 
+  it('keeps the runner tangent velocity even on a tapped release', () => {
+    const radialUp = new THREE.Vector3(1, 0, 0);
+    const forward = new THREE.Vector3(0, 0, 1);
+    const playerVelocity = new THREE.Vector3(0, 0, 5.6);
+    const release = computeShotPutReleaseVelocity({
+      playerVelocity,
+      forward,
+      radialUp,
+      charge: 0.02,
+    });
+
+    expect(release.dot(forward)).toBeGreaterThan(playerVelocity.dot(forward));
+    expect(release.dot(radialUp)).toBeGreaterThan(0);
+    expect(release.length()).toBeGreaterThan(playerVelocity.length());
+  });
+
   it('stays below the orbital ceiling when released from rest at full charge', () => {
     const radialUp = new THREE.Vector3(1, 0, 0);
     const forward = new THREE.Vector3(0, 0, 1);
