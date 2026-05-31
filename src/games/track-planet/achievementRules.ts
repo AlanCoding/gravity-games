@@ -11,9 +11,10 @@ export function shouldAwardPlayerEscape(snapshot: PlayerPhysicsSnapshot): boolea
 export function shouldAwardShotPutOrbit(options: {
   boundOrbit: boolean;
   perigeeAltitude: number;
+  clearance: number;
   hasTouchedSurface: boolean;
 }): boolean {
-  return options.boundOrbit && options.perigeeAltitude > 0 && !options.hasTouchedSurface;
+  return options.boundOrbit && options.perigeeAltitude > options.clearance && !options.hasTouchedSurface;
 }
 
 export function shouldAwardShotPutEscape(options: {

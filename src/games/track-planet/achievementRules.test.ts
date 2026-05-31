@@ -43,7 +43,8 @@ describe('achievement rules', () => {
     expect(
       shouldAwardShotPutOrbit({
         boundOrbit: true,
-        perigeeAltitude: 12,
+        perigeeAltitude: 0.3,
+        clearance: 0.42,
         hasTouchedSurface: true,
       }),
     ).toBe(false);
@@ -51,7 +52,17 @@ describe('achievement rules', () => {
     expect(
       shouldAwardShotPutOrbit({
         boundOrbit: true,
-        perigeeAltitude: 12,
+        perigeeAltitude: 0.3,
+        clearance: 0.42,
+        hasTouchedSurface: false,
+      }),
+    ).toBe(false);
+
+    expect(
+      shouldAwardShotPutOrbit({
+        boundOrbit: true,
+        perigeeAltitude: 0.6,
+        clearance: 0.42,
         hasTouchedSurface: false,
       }),
     ).toBe(true);
