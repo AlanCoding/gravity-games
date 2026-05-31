@@ -100,6 +100,7 @@ export class PlayerPhysics {
       this.position.setLength(this.getGroundDistance(this.position));
       this.velocity.projectOnPlane(getRadialUp(this.position));
       this.applyGroundMovement(input.desiredTangentDirection, input.dt);
+      this.walkAlongSurface(input.dt);
       if (input.jumpRequested && (this.grounded || !this.airborneJumpConsumed)) {
         this.applyJump();
       }
@@ -260,6 +261,23 @@ export class PlayerPhysics {
     );
     this.position.addScaledVector(this.velocity, dt);
     this.resolvePlanetContact();
+  }
+
+  private walkAlongSurface(dt: number): void {
+    const radialUp = getRadialUp(this.position);
+    const tangentVelocity = this.velocity.clone().projectOnPlane(radialUp);
+    const tangentSpeed = tangentVelocity.length();
+    if (tangentSpeed < 0.0001) {
+      this.position.setLength(this.getGroundDistance(this.position));
+      return;
+    }
+
+    const direction = tangentVelocity.clone().normalize();
+    const rotationAxis = new THREE.Vector3().crossVectors(radialUp, direction).normalize();
+    const groundDistance = this.getGroundDistance(this.position);
+    const angle = (tangentSpeed * dt) / Math.max(groundDistance, 0.001);
+    this.position.applyAxisAngle(rotationAxis, angle).setLength(groundDistance);
+    this.velocity.copy(direction.projectOnPlane(getRadialUp(this.position)).normalize().multiplyScalar(tangentSpeed));
   }
 
   private resolvePlanetContact(): void {
