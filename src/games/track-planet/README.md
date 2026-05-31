@@ -6,6 +6,8 @@ Game-specific code and notes belong in this folder. Shared browser input, physic
 
 Current design notes:
 
+- Track Planet mechanics live in [planning/track-planet/mechanics.md](../../../planning/track-planet/mechanics.md).
+- The temporary pole vault change lives in [planning/track-planet/pole-vault-temp.md](../../../planning/track-planet/pole-vault-temp.md).
 - The planet radius is derived from circumference: `radius = 400 / (2 * Math.PI)`.
 - Player height is 2 m.
 - Gravity is custom radial `1/r^2` gravity toward the planet center.

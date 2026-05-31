@@ -7,6 +7,7 @@ Gravity Games is a Vite + TypeScript + Three.js browser game repo for experiment
 - `src/engine/` contains reusable browser/game primitives.
 - `src/games/track-planet/` contains Track Planet-specific code and notes.
 - `src/main.ts` wires the game index and routes to individual games.
+- `planning/` contains design and implementation notes for Track Planet and future gravity-game ideas.
 
 ## Local Development
 
