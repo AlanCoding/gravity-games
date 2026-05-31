@@ -89,9 +89,62 @@ function renderIndex(): void {
             `,
           )
           .join('')}
+        <a class="index-link secondary-link" href="#achievements">
+          <strong>Achievements</strong>
+          <span>View the current goals and milestone list.</span>
+        </a>
         <a class="index-link secondary-link" href="https://alancoding.github.io/">
           <strong>Main Page</strong>
           <span>Return to alancoding.github.io.</span>
+        </a>
+      </nav>
+    </section>
+  `;
+}
+
+function renderAchievements(): void {
+  stopCurrentGame();
+  appElement.innerHTML = `
+    <section class="index-shell">
+      <header class="index-header">
+        <p class="eyebrow">Gravity Games</p>
+        <h1>Achievements</h1>
+        <p class="page-copy">These are the current milestones we’re tracking for Track Planet and the wider Gravity Games set.</p>
+      </header>
+
+      <section class="achievement-catalog" aria-label="Achievement list">
+        <article class="achievement-card">
+          <h2>Track Planet</h2>
+          <ul class="achievement-list">
+            <li>Jump</li>
+            <li>Reach orbit as the player when perigee altitude stays above the planet</li>
+            <li>Escape as the player</li>
+            <li>Throw a shot put</li>
+            <li>Shot put reaches orbit</li>
+            <li>Shot put escapes</li>
+            <li>Complete one orbit throw</li>
+            <li>Ten second airtime throw</li>
+            <li>Bounce a shot put five times</li>
+          </ul>
+        </article>
+
+        <article class="achievement-card">
+          <h2>Future Games</h2>
+          <ul class="achievement-list">
+            <li>Reserved for game-specific milestones from later projects</li>
+            <li>Shared Gravity Games achievements page will grow with each new title</li>
+          </ul>
+        </article>
+      </section>
+
+      <nav class="index-links" aria-label="Achievement navigation">
+        <a class="index-link" href="/gravity-games/">
+          <strong>Home</strong>
+          <span>Return to the Gravity Games index.</span>
+        </a>
+        <a class="index-link secondary-link" href="#track-planet">
+          <strong>Track Planet</strong>
+          <span>Open the game directly.</span>
         </a>
       </nav>
     </section>
@@ -112,7 +165,7 @@ function renderTrackPlanet(): void {
           <div class="game-banner-art" aria-hidden="true" style="--banner-image: url('${trackPlanetBannerUrl}')"></div>
           <div class="game-banner-copy">
             <div class="game-banner-title">
-              <a class="eyebrow game-home-link" href="https://alancoding.github.io/">Gravity Games</a>
+              <a class="eyebrow game-home-link" href="/gravity-games/">Gravity Games</a>
               <h1>Track Planet</h1>
               <p class="page-copy">Run a track wrapped around a small planet and push things into orbit.</p>
             </div>
@@ -183,6 +236,11 @@ function renderTrackPlanet(): void {
 function renderRoute(): void {
   if (window.location.hash === '#track-planet') {
     renderTrackPlanet();
+    return;
+  }
+
+  if (window.location.hash === '#achievements') {
+    renderAchievements();
     return;
   }
 

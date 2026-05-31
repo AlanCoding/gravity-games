@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { type RapierPhysicsWorld } from '../../../engine/physics/rapierWorld';
 import { ProjectilePhysics } from '../physics/projectilePhysics';
+import { PLANET_RADIUS_METERS } from '../constants';
 
 export class ShotPut {
   readonly mesh: THREE.Mesh;
@@ -17,6 +18,7 @@ export class ShotPut {
     planetRadius: number;
     surfaceGravity: number;
     startTime: number;
+    collisionColliderHandles: ReadonlySet<number>;
   }) {
     this.mesh = new THREE.Mesh(
       new THREE.SphereGeometry(0.42, 24, 16),
@@ -33,9 +35,10 @@ export class ShotPut {
       mass: 7.26,
       restitution: 0.58,
       friction: 0.65,
-      planetRadius: options.planetRadius,
+      planetRadius: options.planetRadius ?? PLANET_RADIUS_METERS,
       surfaceGravity: options.surfaceGravity,
       startTime: options.startTime,
+      collisionColliderHandles: options.collisionColliderHandles,
     });
 
     options.scene.add(this.trail, this.mesh);

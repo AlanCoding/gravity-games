@@ -7,7 +7,9 @@ export function createWorldPropColliders(rapier: RapierPhysicsWorld, planetRadiu
   const blockingColliders = new Set<number>();
   const bleacherCollider = createBleacherCollider(rapier, planetRadius);
   blockingColliders.add(bleacherCollider.handle);
-  createRampColliders(rapier, planetRadius);
+  for (const handle of createRampColliders(rapier, planetRadius)) {
+    blockingColliders.add(handle);
+  }
   return blockingColliders;
 }
 
@@ -30,7 +32,7 @@ function createBleacherCollider(rapier: RapierPhysicsWorld, planetRadius: number
   return rapier.world.createCollider(RAPIER.ColliderDesc.cuboid(5.1, 1.65, 2.35).setFriction(0.8), body);
 }
 
-function createRampColliders(rapier: RapierPhysicsWorld, planetRadius: number): void {
+function createRampColliders(rapier: RapierPhysicsWorld, planetRadius: number): number[] {
   const frame = makePlanetFrame({
     planetRadius,
     longitudeDeg: getRampLongitudeDeg(),
@@ -49,9 +51,11 @@ function createRampColliders(rapier: RapierPhysicsWorld, planetRadius: number): 
     .addScaledVector(frame.localUp, RAMP_CONFIG.height / 2)
     .addScaledVector(frame.localForward, fullLength / 2 - RAMP_CONFIG.rampLength / 2);
 
-  createRampBlock(rapier, upCenter, frame.quaternion, RAMP_CONFIG.rampLength);
-  createRampBlock(rapier, topCenter, frame.quaternion, RAMP_CONFIG.topLength);
-  createRampBlock(rapier, downCenter, frame.quaternion, RAMP_CONFIG.rampLength);
+  return [
+    createRampBlock(rapier, upCenter, frame.quaternion, RAMP_CONFIG.rampLength),
+    createRampBlock(rapier, topCenter, frame.quaternion, RAMP_CONFIG.topLength),
+    createRampBlock(rapier, downCenter, frame.quaternion, RAMP_CONFIG.rampLength),
+  ];
 }
 
 function createRampBlock(
@@ -59,11 +63,11 @@ function createRampBlock(
   center: { x: number; y: number; z: number },
   baseRotation: { x: number; y: number; z: number; w: number },
   length: number,
-): void {
+): number {
   const body = rapier.world.createRigidBody(
     RAPIER.RigidBodyDesc.fixed()
       .setTranslation(center.x, center.y, center.z)
       .setRotation(baseRotation),
   );
-  rapier.world.createCollider(RAPIER.ColliderDesc.cuboid(RAMP_CONFIG.width / 2, 0.12, length / 2).setFriction(0.9), body);
+  return rapier.world.createCollider(RAPIER.ColliderDesc.cuboid(RAMP_CONFIG.width / 2, 0.12, length / 2).setFriction(0.9), body).handle;
 }

@@ -113,6 +113,32 @@ h1 {
   background: rgba(255, 255, 255, 0.04);
 }
 
+.achievement-catalog {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.achievement-card {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(16, 20, 23, 0.8);
+  backdrop-filter: blur(18px);
+}
+
+.achievement-card h2 {
+  font-size: 1rem;
+}
+
+.achievement-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: #d7e1de;
+  line-height: 1.45;
+}
+
 .game-page {
   width: min(1180px, 100%);
   min-height: 100vh;
@@ -408,5 +434,9 @@ h1 {
   .controls-list div {
     grid-template-columns: 1fr;
     gap: 0.2rem;
+  }
+
+  .achievement-catalog {
+    grid-template-columns: 1fr;
   }
 }

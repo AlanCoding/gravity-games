@@ -1,17 +1,12 @@
 import * as THREE from 'three';
 import { RAPIER, type RapierPhysicsWorld } from '../../../engine/physics/rapierWorld';
-import { computeOrbitMetrics } from './gravity';
+import { ShotPutMotion } from './shotPutMotion';
 
 export class ProjectilePhysics {
-  readonly body: RAPIER.RigidBody;
-  readonly collider: RAPIER.Collider;
-  readonly startUp: THREE.Vector3;
+  readonly motion: ShotPutMotion;
   readonly startTime: number;
 
-  maxAltitude = 0;
-  bounceCount = 0;
-  orbitAchievementFired = false;
-  escapeAchievementFired = false;
+  private readonly shape: RAPIER.Shape;
 
   constructor(
     private readonly rapier: RapierPhysicsWorld,
@@ -25,79 +20,113 @@ export class ProjectilePhysics {
       planetRadius: number;
       surfaceGravity: number;
       startTime: number;
+      collisionColliderHandles: ReadonlySet<number>;
     },
   ) {
-    this.startUp = options.position.clone().normalize();
+    this.motion = new ShotPutMotion(options);
     this.startTime = options.startTime;
-    this.body = this.rapier.createDynamicBody(options.position, { linearDamping: 0.01, angularDamping: 0.05 });
-    this.body.setLinvel({ x: options.velocity.x, y: options.velocity.y, z: options.velocity.z }, true);
-    this.body.enableCcd(true);
-    this.collider = this.rapier.world.createCollider(
-      RAPIER.ColliderDesc.ball(options.radius)
-        .setDensity(options.mass / ((4 / 3) * Math.PI * options.radius ** 3))
-        .setRestitution(options.restitution)
-        .setFriction(options.friction)
-        .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
-      this.body,
-    );
+    this.shape = new RAPIER.Ball(options.radius);
   }
 
-  beforePhysicsStep(): void {
-    const position = this.getPosition();
-    const fromCenter = position.clone();
-    const distance = Math.max(fromCenter.length(), this.options.planetRadius + this.options.radius * 0.9);
-    const gravityDirection = fromCenter.lengthSq() > 0.000001 ? fromCenter.normalize() : this.startUp.clone();
-    const mu = this.options.surfaceGravity * this.options.planetRadius * this.options.planetRadius;
-    const gravity = gravityDirection.multiplyScalar(-mu / (distance * distance));
-    this.body.addForce({ x: gravity.x * this.body.mass(), y: gravity.y * this.body.mass(), z: gravity.z * this.body.mass() }, true);
-    this.applyAtmosphericDrag(position);
-    this.maxAltitude = Math.max(this.maxAltitude, position.length() - this.options.planetRadius - this.options.radius);
+  beforePhysicsStep(dt: number): void {
+    const previousPosition = this.motion.getPosition();
+    this.motion.step(dt);
+    this.resolveSceneryCollisions(previousPosition);
   }
 
   getPosition(): THREE.Vector3 {
-    const position = this.body.translation();
-    return new THREE.Vector3(position.x, position.y, position.z);
+    return this.motion.getPosition();
   }
 
   getVelocity(): THREE.Vector3 {
-    const velocity = this.body.linvel();
-    return new THREE.Vector3(velocity.x, velocity.y, velocity.z);
+    return this.motion.getVelocity();
   }
 
   getAltitude(): number {
-    return this.getPosition().length() - this.options.planetRadius - this.options.radius;
+    return this.motion.getAltitude();
   }
 
   getSurfaceDistance(): number {
-    const currentUp = this.getPosition().clone().normalize();
-    const angle = Math.acos(THREE.MathUtils.clamp(this.startUp.dot(currentUp), -1, 1));
-    return angle * this.options.planetRadius;
+    return this.motion.getSurfaceDistance();
   }
 
-  getOrbitMetrics(): ReturnType<typeof computeOrbitMetrics> {
-    return computeOrbitMetrics({
-      position: this.getPosition(),
-      velocity: this.getVelocity(),
-      planetRadius: this.options.planetRadius,
-      surfaceGravity: this.options.surfaceGravity,
-    });
+  getOrbitMetrics(): ReturnType<ShotPutMotion['getOrbitMetrics']> {
+    return this.motion.getOrbitMetrics();
   }
 
-  private applyAtmosphericDrag(position: THREE.Vector3): void {
-    const velocity = this.getVelocity();
-    const speed = velocity.length();
-    if (speed < 0.001) {
+  get maxAltitude(): number {
+    return this.motion.maxAltitude;
+  }
+
+  get bounceCount(): number {
+    return this.motion.bounceCount;
+  }
+
+  get orbitAchievementFired(): boolean {
+    return this.motion.orbitAchievementFired;
+  }
+
+  set orbitAchievementFired(value: boolean) {
+    this.motion.orbitAchievementFired = value;
+  }
+
+  get escapeAchievementFired(): boolean {
+    return this.motion.escapeAchievementFired;
+  }
+
+  set escapeAchievementFired(value: boolean) {
+    this.motion.escapeAchievementFired = value;
+  }
+
+  get hasTouchedSurface(): boolean {
+    return this.motion.hasTouchedSurface;
+  }
+
+  applySphereContact(options: Parameters<ShotPutMotion['applySphereContact']>[0]): boolean {
+    return this.motion.applySphereContact(options);
+  }
+
+  resolveSphereContact(other: ProjectilePhysics): boolean {
+    return this.motion.resolveSphereContact(other.motion);
+  }
+
+  private resolveSceneryCollisions(previousPosition: THREE.Vector3): void {
+    const currentPosition = this.motion.getPosition();
+    const displacement = currentPosition.clone().sub(previousPosition);
+    if (displacement.lengthSq() < 0.000001) {
       return;
     }
 
-    const altitude = Math.max(0, position.length() - this.options.planetRadius - this.options.radius);
-    const atmosphereFactor = Math.pow(THREE.MathUtils.clamp(1 - altitude / 120, 0, 1), 2);
-    if (atmosphereFactor <= 0) {
+    const shapeRotation = { x: 0, y: 0, z: 0, w: 1 };
+    const shapePosition = { x: previousPosition.x, y: previousPosition.y, z: previousPosition.z };
+    const shapeVelocity = { x: displacement.x, y: displacement.y, z: displacement.z };
+    const hit = this.rapier.world.castShape(
+      shapePosition,
+      shapeRotation,
+      shapeVelocity,
+      this.shape,
+      displacement.length(),
+      1,
+      true,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      collider => this.options.collisionColliderHandles.has(collider.handle),
+    );
+
+    if (!hit) {
       return;
     }
 
-    const dragCoefficient = 0.02 * atmosphereFactor;
-    const dragForce = velocity.normalize().multiplyScalar(-dragCoefficient * speed * speed * this.body.mass());
-    this.body.addForce({ x: dragForce.x, y: dragForce.y, z: dragForce.z }, true);
+    const contactPosition = previousPosition.clone().addScaledVector(displacement, hit.time_of_impact);
+    const colliderRotation = hit.collider.rotation();
+    const normal = new THREE.Vector3(hit.normal2.x, hit.normal2.y, hit.normal2.z)
+      .applyQuaternion(new THREE.Quaternion(colliderRotation.x, colliderRotation.y, colliderRotation.z, colliderRotation.w))
+      .normalize();
+
+    this.motion.position.copy(contactPosition).addScaledVector(normal, 0.001);
+    this.motion.applyContact({ normal });
+    this.motion.resting = false;
   }
 }
