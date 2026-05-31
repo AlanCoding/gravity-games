@@ -11,7 +11,7 @@ Current design notes:
 - Gravity is custom radial `1/r^2` gravity toward the planet center.
 - Track lanes, bleachers, field markers, and test markers should be placed through `src/engine/planetPlacement.ts`.
 - The game route is `/gravity-games/#track-planet`.
-- Rapier world gravity is disabled. Track Planet manually applies radial gravity in `physics/gravity.ts`.
+- Track Planet uses custom game-managed motion and collision helpers in `physics/`.
 - Hold `F` to charge a shot put throw, release `F` to throw.
 - Press `P` to spawn the placeholder pole entity.
 
@@ -23,5 +23,5 @@ Module layout:
 - `worldProps.ts` builds Track Planet-specific scenery and landmarks.
 - `playerModel.ts` builds the player mesh and shadow indicator.
 - `constants.ts` keeps Track Planet scale and tuning constants together.
-- `physics/` contains Track Planet-specific Rapier player/projectile physics and radial gravity.
+- `physics/` contains Track Planet-specific motion, gravity, collisions, and radial physics helpers.
 - `entities/` contains gameplay entities such as shot puts and the pole placeholder.

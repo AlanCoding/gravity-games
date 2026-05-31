@@ -1,13 +1,11 @@
 import * as THREE from 'three';
 import { type AchievementHooks, type AchievementPayload } from './achievements';
 import { InputController } from '../../engine/input';
-import { RapierPhysicsWorld } from '../../engine/physics/rapierWorld';
 import {
   COYOTE_TIME_SECONDS,
   JUMP_BUFFER_SECONDS,
   PLANET_CIRCUMFERENCE_METERS,
   PLANET_RADIUS_METERS,
-  PHYSICS_DEBUG_ENABLED,
   PLAYER_CENTER_HEIGHT_METERS,
   PLAYER_HEIGHT_METERS,
   SHADOW_MAX_ALTITUDE_METERS,
@@ -27,7 +25,7 @@ import {
 } from './achievementRules';
 import { PlayerPhysics, type PlayerPhysicsSnapshot } from './physics/playerPhysics';
 import { createRampSurface } from './physics/rampSurface';
-import { createWorldPropColliders } from './physics/worldColliders';
+import { createBleacherColliderVolume, type PlanetBoxCollider } from './physics/planetCollision';
 import { createTrackPlanetScene, getTrackStartUp, type TrackPlanetScene } from './scene';
 
 export type TrackPlanetGameOptions = {
@@ -55,12 +53,16 @@ export class TrackPlanetGame {
   private readonly input = new InputController();
   private readonly clock = new THREE.Clock();
   private readonly world: TrackPlanetScene;
-  private rapier: RapierPhysicsWorld | null = null;
   private playerPhysics: PlayerPhysics | null = null;
-  private blockingColliderHandles = new Set<number>();
+  private blockingVolumes: PlanetBoxCollider[] = [];
   private readonly shotPuts: ShotPut[] = [];
   private latestShotPut: ShotPut | null = null;
   private pole: Pole | null = null;
+  private readonly slideSparks: Array<{ position: THREE.Vector3; velocity: THREE.Vector3; ttl: number }> = [];
+  private readonly slideSparkMesh = new THREE.Points(
+    new THREE.BufferGeometry(),
+    new THREE.PointsMaterial({ color: 0xf7e38a, size: 0.08, transparent: true, opacity: 0.95 }),
+  );
   private heading = TRACK_START_FORWARD.clone();
   private cameraPitch = 0.24;
   private cameraOrbitYaw = 0;
@@ -95,9 +97,9 @@ export class TrackPlanetGame {
     this.input.bind();
     window.addEventListener('resize', () => this.world.resize(), { signal: this.resizeAbortController.signal });
     this.world.resize();
-    this.rapier = await RapierPhysicsWorld.create({ debugEnabled: PHYSICS_DEBUG_ENABLED });
-    this.blockingColliderHandles = createWorldPropColliders(this.rapier, PLANET_RADIUS_METERS);
-    this.playerPhysics = new PlayerPhysics(this.rapier, {
+    this.world.scene.add(this.slideSparkMesh);
+    this.blockingVolumes = [createBleacherColliderVolume(PLANET_RADIUS_METERS)];
+    this.playerPhysics = new PlayerPhysics({
       planetRadius: PLANET_RADIUS_METERS,
       surfaceGravity: SURFACE_GRAVITY,
       bodyCenterHeight: PLAYER_CENTER_HEIGHT_METERS,
@@ -105,7 +107,7 @@ export class TrackPlanetGame {
       groundedFriction: 2.6,
       jumpSpeed: 1.4,
       initialUp: getTrackStartUp(PLANET_RADIUS_METERS),
-      blockingColliderHandles: this.blockingColliderHandles,
+      blockingVolumes: this.blockingVolumes,
       groundSurfaces: [createRampSurface(PLANET_RADIUS_METERS)],
     });
     const snapshot = this.playerPhysics.getSnapshot();
@@ -127,7 +129,7 @@ export class TrackPlanetGame {
   }
 
   private frame(): void {
-    if (!this.rapier || !this.playerPhysics) {
+    if (!this.playerPhysics) {
       return;
     }
 
@@ -147,18 +149,15 @@ export class TrackPlanetGame {
     const poleVaultRequested = false;
     const wasThrowPressed = this.throwWasPressed;
     this.updateThrowCharge(dt);
-    this.rapier.step(dt, fixedDt => {
-      this.playerPhysics?.beforePhysicsStep({
-        dt: fixedDt,
-        desiredTangentVelocity,
-        jumpRequested,
-        poleVaultRequested,
-      });
-      for (const shotPut of this.shotPuts) {
-        shotPut.physics.beforePhysicsStep(fixedDt);
-      }
+    this.playerPhysics.beforePhysicsStep({
+      dt,
+      desiredTangentVelocity,
+      jumpRequested,
+      poleVaultRequested,
     });
-    this.rapier.updateDebugLines(this.world.scene);
+    for (const shotPut of this.shotPuts) {
+      shotPut.physics.beforePhysicsStep(dt);
+    }
     this.releaseThrowIfNeeded(wasThrowPressed, snapshotBefore);
     const snapshot = this.playerPhysics.getSnapshot();
     this.transportHeading(snapshotBefore.radialUp, snapshot.radialUp);
@@ -177,6 +176,7 @@ export class TrackPlanetGame {
 
     this.updatePlayer(snapshot);
     this.updatePlayerShadow(snapshot);
+    this.updateSlidingVfx(snapshot, dt);
     for (const shotPut of this.shotPuts) {
       shotPut.updateFromPhysics();
     }
@@ -211,7 +211,7 @@ export class TrackPlanetGame {
   }
 
   private releaseThrowIfNeeded(wasThrowPressed: boolean, snapshot: PlayerPhysicsSnapshot): void {
-    if (!this.rapier || !wasThrowPressed || this.input.isPressed('KeyF')) {
+    if (!wasThrowPressed || this.input.isPressed('KeyF')) {
       return;
     }
     this.throwShotPut(snapshot);
@@ -219,9 +219,6 @@ export class TrackPlanetGame {
   }
 
   private throwShotPut(snapshot: PlayerPhysicsSnapshot): void {
-    if (!this.rapier) {
-      return;
-    }
     const forward = this.heading.clone().projectOnPlane(snapshot.radialUp).normalize();
     const charge = Math.pow(this.throwCharge, 2.25);
     const forwardSpeed = THREE.MathUtils.lerp(0.15, 10.5, charge);
@@ -236,13 +233,12 @@ export class TrackPlanetGame {
       .addScaledVector(snapshot.radialUp, radialSpeed);
     const shotPut = new ShotPut({
       scene: this.world.scene,
-      rapier: this.rapier,
       position: releasePosition,
       velocity: releaseVelocity,
       planetRadius: PLANET_RADIUS_METERS,
       surfaceGravity: SURFACE_GRAVITY,
       startTime: this.elapsed,
-      collisionColliderHandles: this.blockingColliderHandles,
+      collisionVolumes: this.blockingVolumes,
     });
     this.shotPuts.push(shotPut);
     this.latestShotPut = shotPut;
@@ -389,6 +385,59 @@ export class TrackPlanetGame {
       return;
     }
     this.throwChargeDisplay.textContent = `throw charge ${(this.throwCharge * 100).toFixed(0)}%`;
+  }
+
+  private updateSlidingVfx(snapshot: PlayerPhysicsSnapshot, dt: number): void {
+    const up = snapshot.radialUp;
+    const forward = this.heading.clone().projectOnPlane(up).normalize();
+    const right = new THREE.Vector3().crossVectors(forward, up).normalize();
+    const footBase = snapshot.position.clone().addScaledVector(up, -0.92);
+
+    if (snapshot.sliding && snapshot.grounded) {
+      const slipDirection = snapshot.velocity.clone().projectOnPlane(up);
+      if (slipDirection.lengthSq() > 0.000001) {
+        slipDirection.normalize();
+      } else {
+        slipDirection.copy(forward).negate();
+      }
+
+      const sparkCount = 2 + Math.round(snapshot.slidingIntensity * 4);
+      for (let i = 0; i < sparkCount; i += 1) {
+        const lateral = (Math.random() - 0.5) * 0.55;
+        const offset = right.clone().multiplyScalar(lateral);
+        const position = footBase.clone().add(offset).addScaledVector(up, 0.08 + Math.random() * 0.05);
+        const velocity = slipDirection
+          .clone()
+          .multiplyScalar(2.8 + Math.random() * 2.2)
+          .addScaledVector(up, 0.9 + Math.random() * 0.7)
+          .addScaledVector(right, (Math.random() - 0.5) * 0.7);
+        this.slideSparks.push({ position, velocity, ttl: 0.42 + Math.random() * 0.2 });
+      }
+    }
+
+    for (const spark of this.slideSparks) {
+      spark.ttl -= dt;
+      spark.velocity.addScaledVector(up, -6.5 * dt);
+      spark.position.addScaledVector(spark.velocity, dt);
+      spark.velocity.multiplyScalar(Math.max(0, 1 - 3.4 * dt));
+    }
+
+    while (this.slideSparks.length && this.slideSparks[0].ttl <= 0) {
+      this.slideSparks.shift();
+    }
+
+    const positions = new Float32Array(this.slideSparks.length * 3);
+    this.slideSparks.forEach((spark, index) => {
+      positions[index * 3] = spark.position.x;
+      positions[index * 3 + 1] = spark.position.y;
+      positions[index * 3 + 2] = spark.position.z;
+    });
+    this.slideSparkMesh.geometry.dispose();
+    this.slideSparkMesh.geometry = new THREE.BufferGeometry();
+    this.slideSparkMesh.geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const material = this.slideSparkMesh.material as THREE.PointsMaterial;
+    material.opacity = this.slideSparks.length > 0 ? 0.95 : 0;
+    this.slideSparkMesh.visible = this.slideSparks.length > 0;
   }
 
   private resolveShotPutPlayerCollisions(snapshot: PlayerPhysicsSnapshot): void {

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { RAPIER, type RapierPhysicsWorld } from '../../../engine/physics/rapierWorld';
 import { computeOrbitMetrics, computePlanetGravity, getRadialUp } from './gravity';
+import { type PlanetBoxCollider, resolveSphereAgainstPlanetBox } from './planetCollision';
 
 export type PlayerPhysicsInput = {
   dt: number;
@@ -20,26 +20,27 @@ export type PlayerPhysicsSnapshot = {
   altitudeAboveGround: number;
   groundHeight: number;
   normalForceLbf: number;
+  sliding: boolean;
+  slidingIntensity: number;
   orbitalSpeed: number;
   escapeSpeed: number;
   orbitPerigeeAltitude: number;
 };
 
 export class PlayerPhysics {
-  readonly body: RAPIER.RigidBody;
-  readonly collider: RAPIER.Collider;
-
   private position: THREE.Vector3;
   private velocity = new THREE.Vector3();
   private grounded = true;
   private jumpedThisStep = false;
   private airborneJumpConsumed = false;
+  private sliding = false;
+  private slidingIntensity = 0;
   private readonly mu: number;
   private readonly surfaceDistance: number;
   private readonly restingNormalForceLbf = 150;
+  private readonly playerMassKg: number;
 
   constructor(
-    private readonly rapier: RapierPhysicsWorld,
     private readonly options: {
       planetRadius: number;
       surfaceGravity: number;
@@ -48,37 +49,18 @@ export class PlayerPhysics {
       groundedFriction: number;
       jumpSpeed: number;
       initialUp: THREE.Vector3;
-      blockingColliderHandles?: ReadonlySet<number>;
+      blockingVolumes?: ReadonlyArray<PlanetBoxCollider>;
       groundSurfaces?: ReadonlyArray<{ heightAt: (position: THREE.Vector3) => number | null }>;
     },
   ) {
     this.mu = options.surfaceGravity * options.planetRadius * options.planetRadius;
+    this.playerMassKg = (this.restingNormalForceLbf * 4.4482216152605) / options.surfaceGravity;
     this.surfaceDistance = options.planetRadius + options.bodyCenterHeight;
     this.position = options.initialUp.clone().normalize().multiplyScalar(this.surfaceDistance);
-
-    const desc = RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(
-      this.position.x,
-      this.position.y,
-      this.position.z,
-    );
-    this.body = this.rapier.world.createRigidBody(desc);
-
-    const capsuleRadius = 0.32;
-    const capsuleHalfHeight = Math.max(0.2, options.bodyCenterHeight - capsuleRadius);
-    this.collider = this.rapier.world.createCollider(
-      RAPIER.ColliderDesc.capsule(capsuleHalfHeight, capsuleRadius)
-        .setFriction(0.9)
-        .setRestitution(0)
-        .setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),
-      this.body,
-    );
-    this.syncBodyTransform();
   }
 
   beforePhysicsStep(input: PlayerPhysicsInput): void {
     this.jumpedThisStep = false;
-    const previousPosition = this.position.clone();
-    const previousVelocity = this.velocity.clone();
     this.updateGrounded();
 
     if (this.grounded) {
@@ -111,8 +93,7 @@ export class PlayerPhysics {
       this.walkAlongSurface(input.dt);
     }
 
-    this.resolveBlockingCollisions(previousPosition, previousVelocity);
-    this.syncBodyTransform();
+    this.resolveBlockingCollisions();
   }
 
   getSnapshot(): PlayerPhysicsSnapshot {
@@ -136,6 +117,8 @@ export class PlayerPhysics {
       altitudeAboveGround: distance - this.surfaceDistance - groundHeight,
       groundHeight,
       normalForceLbf,
+      sliding: this.sliding,
+      slidingIntensity: this.slidingIntensity,
       orbitalSpeed: Math.sqrt(this.mu / distance),
       escapeSpeed: Math.sqrt((2 * this.mu) / distance),
       orbitPerigeeAltitude: computeOrbitMetrics({
@@ -153,6 +136,11 @@ export class PlayerPhysics {
     const desired = desiredTangentVelocity.clone().projectOnPlane(radialUp);
     const delta = desired.sub(tangentVelocity);
     const maxChange = this.options.tangentAcceleration * dt;
+    const normalForceLbf = this.getNormalForceLbf();
+    const tractionScale = THREE.MathUtils.clamp(normalForceLbf / this.restingNormalForceLbf, 0.12, 1);
+    const availableGrip = maxChange * tractionScale;
+    this.slidingIntensity = 0;
+    this.sliding = false;
     if (delta.length() > maxChange) {
       delta.setLength(maxChange);
     }
@@ -162,7 +150,14 @@ export class PlayerPhysics {
       delta.addScaledVector(tangentVelocity, damp - 1);
     }
 
-    this.velocity.copy(tangentVelocity.add(delta));
+    if (desired.length() > availableGrip) {
+      this.sliding = true;
+      this.slidingIntensity = THREE.MathUtils.clamp((desired.length() - availableGrip) / Math.max(maxChange, 0.0001), 0, 1);
+      const slideDamping = Math.max(0, 1 - 4.5 * dt);
+      this.velocity.copy(tangentVelocity.multiplyScalar(slideDamping).add(delta.multiplyScalar(0.34)));
+    } else {
+      this.velocity.copy(tangentVelocity.add(delta));
+    }
   }
 
   private applyJump(): void {
@@ -221,6 +216,8 @@ export class PlayerPhysics {
     if (radialVelocity < 0) {
       this.velocity.addScaledVector(radialUp, -radialVelocity);
     }
+    this.sliding = false;
+    this.slidingIntensity = 0;
     this.grounded = true;
     this.airborneJumpConsumed = false;
   }
@@ -248,55 +245,26 @@ export class PlayerPhysics {
     return height;
   }
 
-  private syncBodyTransform(): void {
-    const rotation = this.getBodyRotation(this.position);
-    this.body.setNextKinematicTranslation({ x: this.position.x, y: this.position.y, z: this.position.z });
-    this.body.setNextKinematicRotation({ x: rotation.x, y: rotation.y, z: rotation.z, w: rotation.w });
-  }
-
-  private resolveBlockingCollisions(previousPosition: THREE.Vector3, previousVelocity: THREE.Vector3): void {
-    const blockingColliderHandles = this.options.blockingColliderHandles;
-    if (!blockingColliderHandles?.size) {
+  private resolveBlockingCollisions(): void {
+    const blockingVolumes = this.options.blockingVolumes;
+    if (!blockingVolumes?.length) {
       return;
     }
 
-    const rotation = this.getBodyRotation(this.position);
-    const capsuleRadius = 0.32;
-    const capsuleHalfHeight = Math.max(0.2, this.options.bodyCenterHeight - capsuleRadius);
-    const shape = new RAPIER.Capsule(capsuleHalfHeight, capsuleRadius);
-    const hit = this.rapier.world.intersectionWithShape(
-      { x: this.position.x, y: this.position.y, z: this.position.z },
-      { x: rotation.x, y: rotation.y, z: rotation.z, w: rotation.w },
-      shape,
-      undefined,
-      undefined,
-      this.collider,
-      this.body,
-      collider => blockingColliderHandles.has(collider.handle),
-    );
-
-    if (!hit) {
-      return;
-    }
-
-    const attemptedMove = this.position.clone().sub(previousPosition);
-    this.position.copy(previousPosition);
-    if (attemptedMove.lengthSq() > 0.0001) {
-      const blockedDirection = attemptedMove.normalize();
-      const blockedSpeed = this.velocity.dot(blockedDirection);
-      if (blockedSpeed > 0) {
-        this.velocity.addScaledVector(blockedDirection, -blockedSpeed);
-      }
-    } else {
-      this.velocity.copy(previousVelocity.projectOnPlane(getRadialUp(previousPosition)));
+    for (const blocker of blockingVolumes) {
+      resolveSphereAgainstPlanetBox(this.position, this.velocity, 0.78, blocker, {
+        restitution: blocker.restitution,
+        friction: blocker.friction,
+      });
     }
   }
 
-  private getBodyRotation(position: THREE.Vector3): THREE.Quaternion {
-    const up = getRadialUp(position);
-    const forward = this.velocity.lengthSq() > 0.0001 ? this.velocity.clone().projectOnPlane(up).normalize() : new THREE.Vector3(0, 0, 1).projectOnPlane(up).normalize();
-    const stableForward = forward.lengthSq() > 0.0001 ? forward : new THREE.Vector3(1, 0, 0).projectOnPlane(up).normalize();
-    const right = new THREE.Vector3().crossVectors(up, stableForward).normalize();
-    return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, up, stableForward));
+  private getNormalForceLbf(): number {
+    const radialUp = getRadialUp(this.position);
+    const tangentSpeed = this.velocity.clone().projectOnPlane(radialUp).length();
+    const groundDistance = this.getGroundDistance(this.position);
+    const orbitalReduction = (this.playerMassKg * tangentSpeed * tangentSpeed) / Math.max(groundDistance, 0.001);
+    const gravityForce = this.restingNormalForceLbf;
+    return THREE.MathUtils.clamp(gravityForce - orbitalReduction / 4.4482216152605, 0, gravityForce);
   }
 }
