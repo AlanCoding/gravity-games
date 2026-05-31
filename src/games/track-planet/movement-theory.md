@@ -24,8 +24,10 @@ Let:
 - `N` be the current normal force on the ground, in newtons
 - `N0` be the resting normal force, in newtons
 - `v` be the current tangent speed, in meters per second
-- `a_max(N, v)` be the maximum tangential acceleration the runner can generate
+- `a_drive(v)` be the tangential acceleration the runner can generate at speed `v`
 - `a_req` be the acceleration requested by input
+- `mu_s` be the static friction coefficient
+- `mu_k` be the kinetic friction coefficient
 - `v_ref` be the reference speed where acceleration starts to fall off
 - `a_ref` be the baseline acceleration at rest and full support
 
@@ -33,26 +35,24 @@ The UI can keep showing normal force in `lbf`, but the math should use `N` in `N
 
 ## Proposed model
 
-Use a simple two-variable envelope:
+Use a speed-only drive envelope:
 
 ```text
-a_max(N, v) = a_ref * (N0 / max(N, N_floor))^p * max(0, 1 - (v / v_ref)^q)
+a_drive(v) = a_ref * max(0, 1 - (v / v_ref)^q)
 ```
 
 Where:
 
-- `a_ref` is the baseline acceleration at rest and full normal force
-- `N_floor` prevents the formula from exploding when the runner is nearly weightless
-- `p` controls how strongly normal force changes the available acceleration
+- `a_ref` is the baseline acceleration at rest
 - `q` controls how quickly acceleration fades as speed rises
 
 This keeps the structure simple:
 
-- more normal force means more available drive
-- less normal force means less weight to carry and more room to accelerate in the model
 - higher speed means less remaining acceleration
+- the runner can still accelerate if the current speed is below the drive envelope
+- once the runner asks for more acceleration than the static limit allows, the feet slip and the dynamic coefficient takes over
 
-That is not a literal rigid-body friction law. It is a runner model that borrows the same shape as a coefficient-of-friction calculation so the game has a clear tuning knob.
+That is not a literal rigid-body friction law. It is a runner model that uses a friction-like envelope so the game has a clear tuning knob without turning every step into a separate force-balance solve.
 
 ## Baseline tuning target
 
@@ -60,9 +60,9 @@ For ordinary high-school runner feel, the current target should be roughly:
 
 - `a_ref ≈ 3.0 m/s²`
 - `v_ref ≈ 7.4 m/s`
-- `p ≈ 0.45`
 - `q ≈ 2.0`
-- `N_floor ≈ 35 lbf`
+- `mu_s ≈ 1.00`
+- `mu_k ≈ 0.80`
 
 That gives a runner who can accelerate strongly from rest, but is not a world-record sprinter.
 
@@ -98,7 +98,32 @@ These are placeholders for later design work.
 
 ## Sliding rule
 
-If the requested tangent change is larger than the available acceleration envelope, the runner should slide instead of snapping to the input.
+If the requested tangent acceleration is larger than the static friction limit, the runner should slide instead of snapping to the input.
+
+The static limit is:
+
+```text
+a_static_max = mu_s * N / m
+```
+
+If the runner is sliding, then the available acceleration is reduced to the kinetic limit:
+
+```text
+a_kinetic_max = mu_k * N / m
+```
+
+So the actual motion rule becomes:
+
+1. compute `a_drive(v)`
+2. clamp it against `a_static_max`
+3. if the requested change exceeds that clamp, enter sliding
+4. while sliding, use the dynamic coefficient instead
+
+This means:
+
+- if there is no WASD input, the runner just keeps moving with the surface unless existing momentum or terrain geometry causes sliding
+- turning left or right can cause sliding even if straight-line speed is still within the limit, because the lateral change has to fit inside the same friction envelope
+- once the runner becomes fast enough that the model can no longer sustain the requested acceleration, the remaining acceleration becomes a sliding state rather than a hard stop
 
 The model should report:
 
