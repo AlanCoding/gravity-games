@@ -3,7 +3,9 @@
 ## Core idea
 
 Jacob's Ladder is a future gravity game about a series of tidally locked barbell spacecraft in a shared orbital plane
-that move mass up and down a gravity well.
+that move mass up and down a gravity well. The starting body should be a generic fictional planet rather than Earth,
+because the first launch is a surface space gun. The space-gun launch is visually clear and useful for the game even
+though it would be unrealistic for an Earth launch.
 
 The mechanical premise is deliberately physical:
 
@@ -11,6 +13,7 @@ The mechanical premise is deliberately physical:
 - each barbell has two endpoint masses and a tether between them
 - the ideal starting state is tidally locked, not freely rotating
 - Hohmann-style transfers move upmass and downmass from one stage to the next
+- transfers move only between adjacent stages
 - the player controls only timing decisions that would actually be controllable
 - the simulation should use real orbital and rigid-body bookkeeping rather than arcade shortcuts
 
@@ -22,6 +25,18 @@ The central input is timing. The player chooses when to start the next progressi
 
 While a transfer is happening, the player does nothing. The screen can be effectively frozen from an input perspective
 while the simulation plays the transfer out in real time.
+
+The player should not choose a launch angle or target manually. The game computes a transfer that aims at the lower
+endpoint of the next stage tether at the opposite side of the orbit, equivalent to the 180-degree Hohmann-transfer
+picture in the ideal case. The player chooses when to commit that computed transfer.
+
+Reference checkpoint:
+
+- Hop David, "Tran Cislunar Railroad": https://hopsblog-hop.blogspot.com/2016/08/tran-cislunar-railroad.html
+
+That reference describes a three-tether Earth/cislunar concept. Jacob's Ladder is not locked to three stages. The stage
+count should be chosen for game feel, readability, and pacing. Three stages may be enough, but the game can use more if
+that makes the ladder more satisfying.
 
 ## Intended humor
 
@@ -92,6 +107,10 @@ for this game. The important parts are the masses, velocity vectors, angular vel
 The initial tutorial/calibration version may ignore perturbations and hold the ideal barbell orientations/orbits fixed
 to show the clean theoretical transfer. The real simulation should then allow those transfers to disturb the system.
 
+Tether length is not arbitrary. In the clean design, each tether length should be chosen so the endpoint release velocity
+puts payloads into the intended transfer window. There will still be some relative velocity at catch even in the ideal
+case, and that relative velocity should get worse as accumulated perturbations build up during play.
+
 ## Economy
 
 The objective is to make money by delivering mass out of the gravity well.
@@ -111,6 +130,27 @@ This creates the tycoon loop:
 - collect delivery revenue
 - absorb downmass cost and equipment damage
 - keep the ladder functioning long enough to remain profitable
+
+Everything should ultimately map to money rather than hard failure. A bad transfer can still attach, cause damage, and
+make the simulation wobble badly. The player loses money and watches the system degrade rather than getting a clean
+"game over" immediately.
+
+## Catch and prediction model
+
+Each transfer has a specific precomputed target:
+
+- upmass/downmass starts from the current stage
+- the game predicts the next-stage endpoint state into the future
+- the transfer is generated to intercept the lower endpoint of the adjacent stage
+- the visual simulation then plays out the same model
+- the transfer resolves once the payload enters a capture radius around that endpoint
+
+The catch should allow tolerance. If the payload enters the capture radius, it attaches. Any relative velocity at the
+moment of catch is reported as equipment damage and converted into a money cost.
+
+The first prototype should show the happy path only. It does not need timing-window UI, failure bands, or full
+probability-style preview. The player sees the computed transfer that the game intends to execute, then chooses the
+timing.
 
 ## Transfer occupancy
 
