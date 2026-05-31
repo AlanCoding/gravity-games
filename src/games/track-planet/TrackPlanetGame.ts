@@ -8,15 +8,15 @@ import {
   PLANET_RADIUS_METERS,
   PLAYER_CENTER_HEIGHT_METERS,
   PLAYER_HEIGHT_METERS,
+  PLAYER_BASELINE_ACCELERATION_METERS_PER_SECOND_SQUARED,
   PLAYER_KINETIC_FRICTION_COEFFICIENT,
+  PLAYER_RUN_REFERENCE_SPEED_METERS_PER_SECOND,
   PLAYER_STATIC_FRICTION_COEFFICIENT,
-  PLAYER_TANGENT_ACCELERATION_METERS_PER_SECOND_SQUARED,
   SHADOW_MAX_ALTITUDE_METERS,
   SHADOW_SURFACE_OFFSET_METERS,
   SURFACE_GRAVITY,
   TRACK_START_FORWARD,
   TURN_RATE,
-  WALK_SPEED,
 } from './constants';
 import { Pole } from './entities/Pole';
 import { ShotPut } from './entities/ShotPut';
@@ -106,7 +106,8 @@ export class TrackPlanetGame {
       planetRadius: PLANET_RADIUS_METERS,
       surfaceGravity: SURFACE_GRAVITY,
       bodyCenterHeight: PLAYER_CENTER_HEIGHT_METERS,
-      tangentAcceleration: PLAYER_TANGENT_ACCELERATION_METERS_PER_SECOND_SQUARED,
+      baselineAcceleration: PLAYER_BASELINE_ACCELERATION_METERS_PER_SECOND_SQUARED,
+      referenceSpeed: PLAYER_RUN_REFERENCE_SPEED_METERS_PER_SECOND,
       staticFrictionCoefficient: PLAYER_STATIC_FRICTION_COEFFICIENT,
       kineticFrictionCoefficient: PLAYER_KINETIC_FRICTION_COEFFICIENT,
       jumpSpeed: 1.4,
@@ -148,14 +149,14 @@ export class TrackPlanetGame {
       this.lastJumpPressedTime = this.elapsed;
     }
 
-    const desiredTangentVelocity = this.getDesiredTangentVelocity(snapshotBefore);
+    const desiredTangentDirection = this.getDesiredTangentDirection(snapshotBefore);
     const jumpRequested = this.shouldJump(snapshotBefore);
     const poleVaultRequested = false;
     const wasThrowPressed = this.throwWasPressed;
     this.updateThrowCharge(dt);
     this.playerPhysics.beforePhysicsStep({
       dt,
-      desiredTangentVelocity,
+      desiredTangentDirection,
       jumpRequested,
       poleVaultRequested,
     });
@@ -297,7 +298,7 @@ export class TrackPlanetGame {
     }
   }
 
-  private getDesiredTangentVelocity(snapshot: PlayerPhysicsSnapshot): THREE.Vector3 {
+  private getDesiredTangentDirection(snapshot: PlayerPhysicsSnapshot): THREE.Vector3 {
     const up = snapshot.radialUp;
     const forward = this.heading.clone().projectOnPlane(up).normalize();
     const right = new THREE.Vector3().crossVectors(forward, up).normalize();
@@ -307,7 +308,7 @@ export class TrackPlanetGame {
     if (input.lengthSq() > 1) {
       input.normalize();
     }
-    return input.multiplyScalar(WALK_SPEED);
+    return input.lengthSq() > 0 ? input.normalize() : input;
   }
 
   private updatePlayer(snapshot: PlayerPhysicsSnapshot): void {

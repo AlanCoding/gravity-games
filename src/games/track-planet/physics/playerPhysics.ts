@@ -1,11 +1,14 @@
 import * as THREE from 'three';
-import { PLAYER_EFFECTIVE_MASS_KG, WALK_SPEED } from '../constants';
+import {
+  PLAYER_EFFECTIVE_MASS_KG,
+  PLAYER_SPEED_FALLOFF_EXPONENT,
+} from '../constants';
 import { computeOrbitMetrics, computePlanetGravity, getRadialUp } from './gravity';
 import { type PlanetBoxCollider, resolveSphereAgainstPlanetBox } from './planetCollision';
 
 export type PlayerPhysicsInput = {
   dt: number;
-  desiredTangentVelocity: THREE.Vector3;
+  desiredTangentDirection: THREE.Vector3;
   jumpRequested: boolean;
   poleVaultRequested: boolean;
 };
@@ -46,7 +49,8 @@ export class PlayerPhysics {
       planetRadius: number;
       surfaceGravity: number;
       bodyCenterHeight: number;
-      tangentAcceleration: number;
+      baselineAcceleration: number;
+      referenceSpeed: number;
       staticFrictionCoefficient: number;
       kineticFrictionCoefficient: number;
       jumpSpeed: number;
@@ -69,7 +73,7 @@ export class PlayerPhysics {
       this.airborneJumpConsumed = false;
       this.position.setLength(this.getGroundDistance(this.position));
       this.velocity.projectOnPlane(getRadialUp(this.position));
-      this.applyGroundMovement(input.desiredTangentVelocity, input.dt);
+      this.applyGroundMovement(input.desiredTangentDirection, input.dt);
     }
 
     if (input.jumpRequested && (this.grounded || !this.airborneJumpConsumed)) {
@@ -132,21 +136,14 @@ export class PlayerPhysics {
     };
   }
 
-  private applyGroundMovement(desiredTangentVelocity: THREE.Vector3, dt: number): void {
+  private applyGroundMovement(desiredTangentDirection: THREE.Vector3, dt: number): void {
     const radialUp = getRadialUp(this.position);
     const tangentVelocity = this.velocity.clone().projectOnPlane(radialUp);
-    const desired = desiredTangentVelocity.clone().projectOnPlane(radialUp);
+    const desired = desiredTangentDirection.clone().projectOnPlane(radialUp);
     this.slidingIntensity = 0;
     this.sliding = false;
     if (desired.lengthSq() < 0.0001) {
-      const normalForceN = this.getNormalForceLbf() * 4.4482216152605;
-      const kineticFrictionAccel = this.options.kineticFrictionCoefficient * normalForceN / Math.max(this.playerMassKg, 0.001);
-      const dampedSpeed = Math.max(0, tangentVelocity.length() - kineticFrictionAccel * dt);
-      if (dampedSpeed > 0.0001 && tangentVelocity.lengthSq() > 0.000001) {
-        this.velocity.copy(tangentVelocity.setLength(dampedSpeed));
-      } else {
-        this.velocity.copy(new THREE.Vector3());
-      }
+      this.velocity.copy(tangentVelocity);
       return;
     }
 
@@ -155,24 +152,21 @@ export class PlayerPhysics {
     const currentDirection = currentSpeed > 0.0001 ? tangentVelocity.clone().normalize() : desiredDirection.clone();
     const turnAngle = currentDirection.angleTo(desiredDirection);
     const normalForceN = this.getNormalForceLbf() * 4.4482216152605;
-    const tractionLimit = this.options.staticFrictionCoefficient * normalForceN / Math.max(this.playerMassKg, 0.001);
-    const accelLimit = Math.min(this.options.tangentAcceleration, tractionLimit);
-    const maxChange = accelLimit * dt;
-    const delta = desired.clone().sub(tangentVelocity);
-    if (delta.length() > maxChange) {
-      delta.setLength(maxChange);
-    }
+    const staticLimit = this.options.staticFrictionCoefficient * normalForceN / Math.max(this.playerMassKg, 0.001);
+    const kineticLimit = this.options.kineticFrictionCoefficient * normalForceN / Math.max(this.playerMassKg, 0.001);
+    const driveAccel = this.driveAccelerationForSpeed(currentSpeed);
+    const headingSlack = currentSpeed > 0.001 ? (staticLimit * dt) / Math.max(currentSpeed, 0.001) : Math.PI;
+    const turnSlip = currentSpeed > 0.001 && turnAngle > headingSlack + 0.02;
+    const accelLimited = driveAccel > staticLimit + 0.0001;
+    const useSliding = turnSlip || accelLimited;
+    const availableAccel = Math.min(driveAccel, useSliding ? kineticLimit : staticLimit);
+    this.velocity.copy(tangentVelocity.addScaledVector(desiredDirection, availableAccel * dt));
 
-    this.velocity.copy(tangentVelocity.add(delta));
-
-    const lateralPressure = currentSpeed * Math.sin(turnAngle);
-    const slipLimit = Math.max(0.15, tractionLimit * 0.18);
-    const slipRatio = THREE.MathUtils.clamp((lateralPressure - slipLimit) / Math.max(slipLimit, 0.001), 0, 1);
-    const stillNeedsAcceleration = desiredTangentVelocity.lengthSq() > 0.0001 && desired.clone().sub(tangentVelocity).length() > maxChange + 0.0001;
-    const hardTurn = turnAngle > 0.25 && currentSpeed > WALK_SPEED * 0.72;
-    if (stillNeedsAcceleration && hardTurn) {
+    if (useSliding) {
       this.sliding = true;
-      this.slidingIntensity = Math.max(this.slidingIntensity, THREE.MathUtils.clamp(slipRatio + (turnAngle / Math.PI) * 0.6, 0, 1));
+      const speedSlip = THREE.MathUtils.clamp((driveAccel - staticLimit) / Math.max(staticLimit, 0.001), 0, 1);
+      const turnSlipIntensity = THREE.MathUtils.clamp((turnAngle - headingSlack) / Math.max(Math.PI / 2, 0.001), 0, 1);
+      this.slidingIntensity = Math.max(speedSlip, turnSlipIntensity);
     }
   }
 
@@ -282,5 +276,12 @@ export class PlayerPhysics {
     const orbitalReduction = (this.playerMassKg * tangentSpeed * tangentSpeed) / Math.max(groundDistance, 0.001);
     const gravityForce = this.restingNormalForceLbf;
     return THREE.MathUtils.clamp(gravityForce - orbitalReduction / 4.4482216152605, 0, gravityForce);
+  }
+
+  private driveAccelerationForSpeed(speed: number): number {
+    const baseAcceleration = this.options.baselineAcceleration;
+    const referenceSpeed = Math.max(this.options.referenceSpeed, 0.001);
+    const falloff = Math.max(0, 1 - Math.pow(speed / referenceSpeed, PLAYER_SPEED_FALLOFF_EXPONENT));
+    return baseAcceleration * falloff;
   }
 }
