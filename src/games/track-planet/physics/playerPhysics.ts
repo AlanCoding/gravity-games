@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { PLAYER_EFFECTIVE_MASS_KG, WALK_SPEED } from '../constants';
 import { computeOrbitMetrics, computePlanetGravity, getRadialUp } from './gravity';
 import { type PlanetBoxCollider, resolveSphereAgainstPlanetBox } from './planetCollision';
 
@@ -46,7 +47,8 @@ export class PlayerPhysics {
       surfaceGravity: number;
       bodyCenterHeight: number;
       tangentAcceleration: number;
-      groundedFriction: number;
+      staticFrictionCoefficient: number;
+      kineticFrictionCoefficient: number;
       jumpSpeed: number;
       initialUp: THREE.Vector3;
       blockingVolumes?: ReadonlyArray<PlanetBoxCollider>;
@@ -54,7 +56,7 @@ export class PlayerPhysics {
     },
   ) {
     this.mu = options.surfaceGravity * options.planetRadius * options.planetRadius;
-    this.playerMassKg = (this.restingNormalForceLbf * 4.4482216152605) / options.surfaceGravity;
+    this.playerMassKg = PLAYER_EFFECTIVE_MASS_KG;
     this.surfaceDistance = options.planetRadius + options.bodyCenterHeight;
     this.position = options.initialUp.clone().normalize().multiplyScalar(this.surfaceDistance);
   }
@@ -134,29 +136,43 @@ export class PlayerPhysics {
     const radialUp = getRadialUp(this.position);
     const tangentVelocity = this.velocity.clone().projectOnPlane(radialUp);
     const desired = desiredTangentVelocity.clone().projectOnPlane(radialUp);
-    const delta = desired.sub(tangentVelocity);
-    const maxChange = this.options.tangentAcceleration * dt;
-    const normalForceLbf = this.getNormalForceLbf();
-    const tractionScale = THREE.MathUtils.clamp(normalForceLbf / this.restingNormalForceLbf, 0.12, 1);
-    const availableGrip = maxChange * tractionScale;
     this.slidingIntensity = 0;
     this.sliding = false;
+    if (desired.lengthSq() < 0.0001) {
+      const normalForceN = this.getNormalForceLbf() * 4.4482216152605;
+      const kineticFrictionAccel = this.options.kineticFrictionCoefficient * normalForceN / Math.max(this.playerMassKg, 0.001);
+      const dampedSpeed = Math.max(0, tangentVelocity.length() - kineticFrictionAccel * dt);
+      if (dampedSpeed > 0.0001 && tangentVelocity.lengthSq() > 0.000001) {
+        this.velocity.copy(tangentVelocity.setLength(dampedSpeed));
+      } else {
+        this.velocity.copy(new THREE.Vector3());
+      }
+      return;
+    }
+
+    const desiredDirection = desired.clone().normalize();
+    const currentSpeed = tangentVelocity.length();
+    const currentDirection = currentSpeed > 0.0001 ? tangentVelocity.clone().normalize() : desiredDirection.clone();
+    const turnAngle = currentDirection.angleTo(desiredDirection);
+    const normalForceN = this.getNormalForceLbf() * 4.4482216152605;
+    const tractionLimit = this.options.staticFrictionCoefficient * normalForceN / Math.max(this.playerMassKg, 0.001);
+    const accelLimit = Math.min(this.options.tangentAcceleration, tractionLimit);
+    const maxChange = accelLimit * dt;
+    const delta = desired.clone().sub(tangentVelocity);
     if (delta.length() > maxChange) {
       delta.setLength(maxChange);
     }
 
-    if (desiredTangentVelocity.lengthSq() < 0.0001) {
-      const damp = Math.max(0, 1 - this.options.groundedFriction * dt);
-      delta.addScaledVector(tangentVelocity, damp - 1);
-    }
+    this.velocity.copy(tangentVelocity.add(delta));
 
-    if (desired.length() > availableGrip) {
+    const lateralPressure = currentSpeed * Math.sin(turnAngle);
+    const slipLimit = Math.max(0.15, tractionLimit * 0.18);
+    const slipRatio = THREE.MathUtils.clamp((lateralPressure - slipLimit) / Math.max(slipLimit, 0.001), 0, 1);
+    const stillNeedsAcceleration = desiredTangentVelocity.lengthSq() > 0.0001 && desired.clone().sub(tangentVelocity).length() > maxChange + 0.0001;
+    const hardTurn = turnAngle > 0.25 && currentSpeed > WALK_SPEED * 0.72;
+    if (stillNeedsAcceleration && hardTurn) {
       this.sliding = true;
-      this.slidingIntensity = THREE.MathUtils.clamp((desired.length() - availableGrip) / Math.max(maxChange, 0.0001), 0, 1);
-      const slideDamping = Math.max(0, 1 - 4.5 * dt);
-      this.velocity.copy(tangentVelocity.multiplyScalar(slideDamping).add(delta.multiplyScalar(0.34)));
-    } else {
-      this.velocity.copy(tangentVelocity.add(delta));
+      this.slidingIntensity = Math.max(this.slidingIntensity, THREE.MathUtils.clamp(slipRatio + (turnAngle / Math.PI) * 0.6, 0, 1));
     }
   }
 

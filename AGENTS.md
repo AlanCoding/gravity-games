@@ -34,6 +34,7 @@ This repository is a Vite + TypeScript + Three.js browser game repo for npm-buil
 - Keep only genuinely reusable 3D/game infrastructure under `src/engine/`.
 - Preserve the custom physics boundary. Do not add Rapier or another built-in gravity engine unless explicitly requested.
 - Achievement integrations should stay behind placeholder callbacks or small adapter modules until the target achievements system is clear.
+- After each completed response that changes the repo, create a git commit with a concise message that describes the change.
 - If a requested change reveals a logical refactor opportunity, prompt the user with the refactor idea and ask for a yes/no go-ahead before doing it.
 
 ## Validation
