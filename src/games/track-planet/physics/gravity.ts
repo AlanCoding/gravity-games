@@ -20,6 +20,7 @@ export function getRadialUp(position: THREE.Vector3, planetCenter = new THREE.Ve
 export type OrbitMetrics = {
   specificEnergy: number;
   boundOrbit: boolean;
+  perigeeDistance: number;
   perigeeAltitude: number;
   apoapsisAltitude: number;
 };
@@ -43,6 +44,7 @@ export function computeOrbitMetrics(options: {
     return {
       specificEnergy,
       boundOrbit: false,
+      perigeeDistance: Number.POSITIVE_INFINITY,
       perigeeAltitude: Number.POSITIVE_INFINITY,
       apoapsisAltitude: Number.POSITIVE_INFINITY,
     };
@@ -59,6 +61,7 @@ export function computeOrbitMetrics(options: {
   return {
     specificEnergy,
     boundOrbit: true,
+    perigeeDistance,
     perigeeAltitude: perigeeDistance - options.planetRadius,
     apoapsisAltitude: apoapsisDistance - options.planetRadius,
   };

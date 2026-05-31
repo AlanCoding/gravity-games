@@ -491,8 +491,8 @@ export class TrackPlanetGame {
       const orbitMetrics = shotPut.physics.getOrbitMetrics();
       if (!shotPut.physics.orbitAchievementFired && shouldAwardShotPutOrbit({
         boundOrbit: orbitMetrics.boundOrbit,
-        perigeeAltitude: orbitMetrics.perigeeAltitude,
-        clearance: 0.42,
+        perigeeDistance: orbitMetrics.perigeeDistance,
+        minimumPerigeeDistance: PLANET_RADIUS_METERS + 0.42,
         hasTouchedSurface: shotPut.physics.hasTouchedSurface,
       })) {
         shotPut.physics.orbitAchievementFired = true;
