@@ -29,6 +29,7 @@ import {
 import { PlayerPhysics, type PlayerPhysicsSnapshot } from './physics/playerPhysics';
 import { createRampSurface } from './physics/rampSurface';
 import { createBleacherColliderVolume, type PlanetBoxCollider } from './physics/planetCollision';
+import { computeShotPutReleaseVelocity } from './physics/throwPhysics';
 import { createTrackPlanetScene, getTrackStartUp, type TrackPlanetScene } from './scene';
 
 export type TrackPlanetGameOptions = {
@@ -225,17 +226,16 @@ export class TrackPlanetGame {
 
   private throwShotPut(snapshot: PlayerPhysicsSnapshot): void {
     const forward = this.heading.clone().projectOnPlane(snapshot.radialUp).normalize();
-    const charge = Math.pow(this.throwCharge, 2.25);
-    const forwardSpeed = THREE.MathUtils.lerp(0.15, 10.5, charge);
-    const radialSpeed = THREE.MathUtils.lerp(0.04, 1.15, charge);
-    const carriedVelocity = snapshot.velocity.clone().projectOnPlane(snapshot.radialUp).multiplyScalar(0.03);
     const releasePosition = snapshot.position
       .clone()
       .addScaledVector(snapshot.radialUp, 1.2)
       .addScaledVector(forward, 1.4);
-    const releaseVelocity = carriedVelocity
-      .addScaledVector(forward, forwardSpeed)
-      .addScaledVector(snapshot.radialUp, radialSpeed);
+    const releaseVelocity = computeShotPutReleaseVelocity({
+      playerVelocity: snapshot.velocity,
+      forward,
+      radialUp: snapshot.radialUp,
+      charge: this.throwCharge,
+    });
     const shotPut = new ShotPut({
       scene: this.world.scene,
       position: releasePosition,

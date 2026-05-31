@@ -167,6 +167,27 @@ describe('ShotPutMotion', () => {
     expect(motion.getVelocity().x).toBeGreaterThan(0);
   });
 
+  it('holds the initial release velocity when thrown from a moving runner', () => {
+    const radius = 0.42;
+    const motion = new ShotPutMotion({
+      position: new THREE.Vector3(PLANET_RADIUS_METERS + radius, 0, 0),
+      velocity: new THREE.Vector3(6.1, 0, 4.9),
+      radius,
+      mass: 7.26,
+      planetRadius: PLANET_RADIUS_METERS,
+      surfaceGravity: SURFACE_GRAVITY,
+      restitution: 0.42,
+      friction: 0.72,
+      startTime: 0,
+      atmosphereHeight: 120,
+      dragCoefficient: 0.02,
+      restingSpeed: 0.05,
+    });
+
+    expect(motion.getVelocity().length()).toBeGreaterThan(7.5);
+    expect(motion.getVelocity().dot(new THREE.Vector3(1, 0, 0))).toBeGreaterThan(0);
+  });
+
   it('bounces off another shot put', () => {
     const radius = 0.42;
     const a = new ShotPutMotion({
