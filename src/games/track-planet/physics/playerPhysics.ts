@@ -19,6 +19,7 @@ export type PlayerPhysicsSnapshot = {
   altitude: number;
   altitudeAboveGround: number;
   groundHeight: number;
+  normalForceLbf: number;
   orbitalSpeed: number;
   escapeSpeed: number;
   orbitPerigeeAltitude: number;
@@ -35,6 +36,7 @@ export class PlayerPhysics {
   private airborneJumpConsumed = false;
   private readonly mu: number;
   private readonly surfaceDistance: number;
+  private readonly restingNormalForceLbf = 150;
 
   constructor(
     private readonly rapier: RapierPhysicsWorld,
@@ -117,16 +119,23 @@ export class PlayerPhysics {
     this.updateGrounded();
     const distance = Math.max(this.position.length(), 0.001);
     const groundHeight = this.getGroundHeight(this.position);
+    const radialUp = getRadialUp(this.position);
+    const tangentSpeed = this.velocity.clone().projectOnPlane(radialUp).length();
+    const supportLimit = this.options.surfaceGravity * this.getGroundDistance(this.position);
+    const normalForceLbf = this.grounded
+      ? this.restingNormalForceLbf * THREE.MathUtils.clamp(1 - (tangentSpeed * tangentSpeed) / Math.max(supportLimit, 0.0001), 0, 1)
+      : 0;
     return {
       position: this.position.clone(),
       velocity: this.velocity.clone(),
-      radialUp: getRadialUp(this.position),
+      radialUp,
       grounded: this.grounded,
       jumped: this.jumpedThisStep,
       speed: this.velocity.length(),
       altitude: distance - this.surfaceDistance,
       altitudeAboveGround: distance - this.surfaceDistance - groundHeight,
       groundHeight,
+      normalForceLbf,
       orbitalSpeed: Math.sqrt(this.mu / distance),
       escapeSpeed: Math.sqrt((2 * this.mu) / distance),
       orbitPerigeeAltitude: computeOrbitMetrics({

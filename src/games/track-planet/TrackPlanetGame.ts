@@ -360,15 +360,14 @@ export class TrackPlanetGame {
     if (this.orbitalDisplay) {
       this.orbitalDisplay.textContent = `orbital ${snapshot.orbitalSpeed.toFixed(1)} m/s`;
     }
-    const coordinates = this.getPlanetCoordinates(snapshot);
     if (this.longitudeDisplay) {
-      this.longitudeDisplay.textContent = `lon ${coordinates.longitude.toFixed(1)}`;
+      this.longitudeDisplay.textContent = `normal ${snapshot.normalForceLbf.toFixed(0)} lbf`;
     }
     if (this.latitudeDisplay) {
-      this.latitudeDisplay.textContent = `lat ${coordinates.latitude.toFixed(1)}`;
+      this.latitudeDisplay.textContent = '';
     }
     if (this.altitudeDisplay) {
-      this.altitudeDisplay.textContent = `alt ${coordinates.altitude.toFixed(1)} m`;
+      this.altitudeDisplay.textContent = `alt ${snapshot.altitude.toFixed(1)} m`;
     }
   }
 
@@ -412,17 +411,6 @@ export class TrackPlanetGame {
         this.shotPuts[i].physics.resolveSphereContact(this.shotPuts[j].physics);
       }
     }
-  }
-
-  private getPlanetCoordinates(snapshot: PlayerPhysicsSnapshot): { longitude: number; latitude: number; altitude: number } {
-    const up = snapshot.radialUp;
-    const longitude = THREE.MathUtils.radToDeg(Math.atan2(up.z, up.x));
-    const latitude = THREE.MathUtils.radToDeg(Math.asin(THREE.MathUtils.clamp(up.y, -1, 1)));
-    return {
-      longitude: longitude < 0 ? longitude + 360 : longitude,
-      latitude,
-      altitude: snapshot.altitude,
-    };
   }
 
   private checkThrowHooks(snapshot: PlayerPhysicsSnapshot): void {

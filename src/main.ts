@@ -173,8 +173,8 @@ function renderTrackPlanet(): void {
               <span id="velocityDisplay">0.0 m/s</span>
               <span id="orbitalDisplay">orbital 0.0 m/s</span>
               <span id="throwChargeDisplay">throw charge 0%</span>
-              <span id="longitudeDisplay">lon 0.0</span>
-              <span id="latitudeDisplay">lat 0.0</span>
+              <span id="longitudeDisplay">normal 150 lbf</span>
+              <span id="latitudeDisplay"></span>
               <span id="altitudeDisplay">alt 0.0 m</span>
             </div>
           </div>
