@@ -60,65 +60,103 @@ function addShotPutMarkers(scene: THREE.Scene, planetRadius: number): void {
 }
 
 function addLongJumpMarkers(scene: THREE.Scene, planetRadius: number): void {
-  const group = createPlacedGroup({
+  const runwayMaterial = new THREE.MeshStandardMaterial({ color: 0xb3a18a, emissive: 0x20170f, roughness: 0.7 });
+  const boardMaterial = new THREE.MeshStandardMaterial({ color: 0xf2f7f3, emissive: 0x2b2d2b, roughness: 0.58 });
+  const pitMaterial = new THREE.MeshStandardMaterial({ color: 0xd8c19a, emissive: 0x271c10, roughness: 0.82 });
+
+  addCurvedRunway(scene, {
     planetRadius,
     longitudeDeg: 196,
     latitudeDeg: -18,
     altitude: 0.13,
     headingDeg: 90,
+    width: 2.1,
+    length: 26,
+    material: runwayMaterial,
+    segmentLength: 2,
   });
-  const runwayMaterial = new THREE.MeshStandardMaterial({ color: 0xb3a18a, emissive: 0x20170f, roughness: 0.7 });
-  const boardMaterial = new THREE.MeshStandardMaterial({ color: 0xf2f7f3, emissive: 0x2b2d2b, roughness: 0.58 });
-  const pitMaterial = new THREE.MeshStandardMaterial({ color: 0xd8c19a, emissive: 0x271c10, roughness: 0.82 });
-
-  const runway = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.1, 26), runwayMaterial);
-  runway.position.y = 0.05;
-  group.add(runway);
 
   const board = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.12, 0.36), boardMaterial);
-  board.position.set(0, 0.08, 8.8);
-  group.add(board);
+  placeOnPlanet(board, {
+    planetRadius,
+    longitudeDeg: 196 + trackDistanceToLongitude(8.8, planetRadius, -18),
+    latitudeDeg: -18,
+    altitude: 0.08,
+    headingDeg: 90,
+  });
+  scene.add(board);
 
-  const pit = new THREE.Mesh(new THREE.BoxGeometry(8.5, 0.08, 5.2), pitMaterial);
-  pit.position.set(0, 0.04, 13.6);
-  group.add(pit);
-
-  scene.add(group);
+  addCurvedRunway(scene, {
+    planetRadius,
+    longitudeDeg: 196,
+    latitudeDeg: -18,
+    altitude: 0.04,
+    headingDeg: 90,
+    width: 8.5,
+    length: 5.2,
+    material: pitMaterial,
+    segmentLength: 1.1,
+  });
 }
 
 function addPoleVaultMarkers(scene: THREE.Scene, planetRadius: number): void {
-  const group = createPlacedGroup({
+  const runwayMaterial = new THREE.MeshStandardMaterial({ color: 0x7e8f8d, emissive: 0x151c1b, roughness: 0.72 });
+  const boxMaterial = new THREE.MeshStandardMaterial({ color: 0xf2f7f3, emissive: 0x2b2d2b, roughness: 0.58 });
+  const barMaterial = new THREE.MeshStandardMaterial({ color: 0xe5c97c, emissive: 0x2b210c, roughness: 0.46 });
+
+  addCurvedRunway(scene, {
     planetRadius,
     longitudeDeg: 232,
     latitudeDeg: -18,
     altitude: 0.13,
     headingDeg: 90,
+    width: 2.0,
+    length: 24,
+    material: runwayMaterial,
+    segmentLength: 2,
   });
-  const runwayMaterial = new THREE.MeshStandardMaterial({ color: 0x7e8f8d, emissive: 0x151c1b, roughness: 0.72 });
-  const boxMaterial = new THREE.MeshStandardMaterial({ color: 0xf2f7f3, emissive: 0x2b2d2b, roughness: 0.58 });
-  const barMaterial = new THREE.MeshStandardMaterial({ color: 0xe5c97c, emissive: 0x2b210c, roughness: 0.46 });
-
-  const runway = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.1, 24), runwayMaterial);
-  runway.position.y = 0.05;
-  group.add(runway);
 
   const plantBox = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.12, 1.3), boxMaterial);
-  plantBox.position.set(0, 0.08, 8.0);
-  group.add(plantBox);
+  placeOnPlanet(plantBox, {
+    planetRadius,
+    longitudeDeg: 232 + trackDistanceToLongitude(8.0, planetRadius, -18),
+    latitudeDeg: -18,
+    altitude: 0.08,
+    headingDeg: 90,
+  });
+  scene.add(plantBox);
 
   const leftStandard = new THREE.Mesh(new THREE.BoxGeometry(0.18, 4.3, 0.18), barMaterial);
-  leftStandard.position.set(-2.1, 2.15, 10.7);
-  group.add(leftStandard);
+  placeOnPlanet(leftStandard, {
+    planetRadius,
+    longitudeDeg: 232 + trackDistanceToLongitude(10.7, planetRadius, -18),
+    latitudeDeg: -18,
+    altitude: 0.13,
+    headingDeg: 90,
+    radialOffset: -2.1,
+  });
+  scene.add(leftStandard);
 
   const rightStandard = new THREE.Mesh(new THREE.BoxGeometry(0.18, 4.3, 0.18), barMaterial);
-  rightStandard.position.set(2.1, 2.15, 10.7);
-  group.add(rightStandard);
+  placeOnPlanet(rightStandard, {
+    planetRadius,
+    longitudeDeg: 232 + trackDistanceToLongitude(10.7, planetRadius, -18),
+    latitudeDeg: -18,
+    altitude: 0.13,
+    headingDeg: 90,
+    radialOffset: 2.1,
+  });
+  scene.add(rightStandard);
 
   const crossBar = new THREE.Mesh(new THREE.BoxGeometry(4.3, 0.12, 0.12), barMaterial);
-  crossBar.position.set(0, 3.05, 10.7);
-  group.add(crossBar);
-
-  scene.add(group);
+  placeOnPlanet(crossBar, {
+    planetRadius,
+    longitudeDeg: 232 + trackDistanceToLongitude(10.7, planetRadius, -18),
+    latitudeDeg: -18,
+    altitude: 3.05,
+    headingDeg: 90,
+  });
+  scene.add(crossBar);
 }
 
 function createGroundTriangle(width: number, length: number, material: THREE.Material): THREE.Mesh {
@@ -196,6 +234,40 @@ function createRampSegment(
   ]);
   geometry.computeVertexNormals();
   return new THREE.Mesh(geometry, material);
+}
+
+function addCurvedRunway(
+  scene: THREE.Scene,
+  options: {
+    planetRadius: number;
+    longitudeDeg: number;
+    latitudeDeg: number;
+    altitude: number;
+    headingDeg: number;
+    width: number;
+    length: number;
+    material: THREE.Material;
+    segmentLength?: number;
+  },
+): void {
+  const segmentLength = options.segmentLength ?? 2;
+  const segmentCount = Math.max(1, Math.ceil(options.length / segmentLength));
+  const startOffset = -options.length / 2;
+  for (let index = 0; index < segmentCount; index += 1) {
+    const centerDistance = startOffset + (index + 0.5) * (options.length / segmentCount);
+    const segment = new THREE.Mesh(
+      new THREE.BoxGeometry(options.width, 0.1, options.length / segmentCount),
+      options.material,
+    );
+    placeOnPlanet(segment, {
+      planetRadius: options.planetRadius,
+      longitudeDeg: options.longitudeDeg + trackDistanceToLongitude(centerDistance, options.planetRadius, options.latitudeDeg),
+      latitudeDeg: options.latitudeDeg,
+      altitude: options.altitude,
+      headingDeg: options.headingDeg,
+    });
+    scene.add(segment);
+  }
 }
 
 function createRotatingObject(): THREE.Object3D {

@@ -255,8 +255,8 @@ export class ShotPutMotion {
     const tangentialVelocity = this.velocity.clone().addScaledVector(normal, -radialVelocity);
     const gravityMagnitude = this.surfaceGravityMagnitude(this.position);
     const surfaceFriction = this.options.friction * gravityMagnitude * dt;
-    const restThreshold = this.options.restingSpeed ?? 0.15;
-    const bounceThreshold = 0.35;
+    const restThreshold = this.options.restingSpeed ?? 0.025;
+    const bounceThreshold = 0.0;
 
     const impactSpeed = Math.max(0, -radialVelocity);
     const tangentialSpeed = tangentialVelocity.length();
@@ -279,14 +279,15 @@ export class ShotPutMotion {
 
     this.velocity.copy(reducedTangentialVelocity);
     if (impactSpeed > bounceThreshold) {
-      this.velocity.addScaledVector(normal, impactSpeed * this.options.restitution);
+      const reboundSpeed = Math.max(impactSpeed * this.options.restitution, 0.72);
+      this.velocity.addScaledVector(normal, reboundSpeed);
+      this.position.addScaledVector(normal, 0.05);
     }
 
-    if (this.velocity.dot(normal) < 0) {
-      this.velocity.addScaledVector(normal, -this.velocity.dot(normal));
+    const radialAfterBounce = this.velocity.dot(normal);
+    if (radialAfterBounce < 0) {
+      this.velocity.addScaledVector(normal, -radialAfterBounce);
     }
-
-    this.velocity.addScaledVector(normal, 0.01);
     if (!this.touchingSurface) {
       this.bounceCount += 1;
     }

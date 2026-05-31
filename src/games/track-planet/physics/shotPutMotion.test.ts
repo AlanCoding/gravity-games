@@ -69,7 +69,73 @@ describe('ShotPutMotion', () => {
     motion.step(1 / 30);
 
     expect(motion.bounceCount).toBeGreaterThan(0);
-    expect(motion.getVelocity().dot(new THREE.Vector3(1, 0, 0))).toBeGreaterThan(0);
+    expect(motion.getVelocity().dot(motion.getPosition().clone().normalize())).toBeGreaterThan(0);
+  });
+
+  it('bounces on a simple downward impact', () => {
+    const radius = 0.42;
+    const surfaceRadius = PLANET_RADIUS_METERS + radius;
+    const motion = new ShotPutMotion({
+      position: new THREE.Vector3(surfaceRadius + 0.12, 0, 0),
+      velocity: new THREE.Vector3(-3.6, 0, 0),
+      radius,
+      mass: 7.26,
+      planetRadius: PLANET_RADIUS_METERS,
+      surfaceGravity: SURFACE_GRAVITY,
+      restitution: 0.52,
+      friction: 0.24,
+      startTime: 0,
+      atmosphereHeight: 120,
+      dragCoefficient: 0.01,
+      restingSpeed: 0.05,
+    });
+
+    let elapsed = 0;
+    while (motion.bounceCount === 0 && elapsed < 2) {
+      motion.step(1 / 240);
+      elapsed += 1 / 240;
+    }
+
+    expect(motion.getVelocity().x).toBeGreaterThan(0);
+    expect(motion.resting).toBe(false);
+    expect(elapsed).toBeLessThan(2);
+  });
+
+  it('rises back above the surface after a bounce', () => {
+    const radius = 0.42;
+    const surfaceRadius = PLANET_RADIUS_METERS + radius;
+    const motion = new ShotPutMotion({
+      position: new THREE.Vector3(surfaceRadius + 0.18, 0, 0),
+      velocity: new THREE.Vector3(-4.1, 0, 0),
+      radius,
+      mass: 7.26,
+      planetRadius: PLANET_RADIUS_METERS,
+      surfaceGravity: SURFACE_GRAVITY,
+      restitution: 0.56,
+      friction: 0.18,
+      startTime: 0,
+      atmosphereHeight: 120,
+      dragCoefficient: 0.01,
+      restingSpeed: 0.04,
+    });
+
+    let bouncedAt = -1;
+    let velocityAfterBounce = 0;
+    let maxAltitudeAfterBounce = Number.NEGATIVE_INFINITY;
+    for (let i = 0; i < 480; i += 1) {
+      motion.step(1 / 240);
+      if (bouncedAt < 0 && motion.bounceCount > 0) {
+        bouncedAt = i;
+        velocityAfterBounce = motion.getVelocity().x;
+      }
+      if (bouncedAt >= 0) {
+        maxAltitudeAfterBounce = Math.max(maxAltitudeAfterBounce, motion.getAltitude());
+      }
+    }
+
+    expect(bouncedAt).toBeGreaterThanOrEqual(0);
+    expect(velocityAfterBounce).toBeGreaterThan(0);
+    expect(maxAltitudeAfterBounce).toBeGreaterThan(0);
   });
 
   it('bounces off a moving sphere contact', () => {

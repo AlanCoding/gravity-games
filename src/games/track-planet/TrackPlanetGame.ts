@@ -144,7 +144,7 @@ export class TrackPlanetGame {
 
     const desiredTangentVelocity = this.getDesiredTangentVelocity(snapshotBefore);
     const jumpRequested = this.shouldJump(snapshotBefore);
-    const poleVaultRequested = jumpRequested && Boolean(this.pole);
+    const poleVaultRequested = false;
     const wasThrowPressed = this.throwWasPressed;
     this.updateThrowCharge(dt);
     this.rapier.step(dt, fixedDt => {
@@ -157,7 +157,6 @@ export class TrackPlanetGame {
       for (const shotPut of this.shotPuts) {
         shotPut.physics.beforePhysicsStep(fixedDt);
       }
-      this.applyPoleGravity();
     });
     this.rapier.updateDebugLines(this.world.scene);
     this.releaseThrowIfNeeded(wasThrowPressed, snapshotBefore);
@@ -168,7 +167,7 @@ export class TrackPlanetGame {
 
     if (snapshot.jumped) {
       if (poleVaultRequested) {
-        this.pole?.dispose(this.rapier);
+        this.pole?.dispose();
         this.pole = null;
       }
       this.lastJumpPressedTime = Number.NEGATIVE_INFINITY;
@@ -251,7 +250,7 @@ export class TrackPlanetGame {
   }
 
   private spawnPole(): void {
-    if (!this.rapier || !this.playerPhysics) {
+    if (!this.playerPhysics) {
       return;
     }
     const snapshot = this.playerPhysics.getSnapshot();
@@ -260,23 +259,7 @@ export class TrackPlanetGame {
     const position = snapshot.position.clone().addScaledVector(snapshot.radialUp, 1).addScaledVector(right, 1.6);
     const orientation = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, snapshot.radialUp, forward));
     orientation.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -0.55));
-    this.pole = new Pole({ scene: this.world.scene, rapier: this.rapier, position, orientation });
-  }
-
-  private applyPoleGravity(): void {
-    if (!this.pole) {
-      return;
-    }
-    const position = this.pole.body.translation();
-    const vector = new THREE.Vector3(position.x, position.y, position.z);
-    const gravity = vector
-      .clone()
-      .normalize()
-      .multiplyScalar((-SURFACE_GRAVITY * PLANET_RADIUS_METERS * PLANET_RADIUS_METERS) / Math.max(vector.lengthSq(), 0.001));
-    this.pole.body.addForce(
-      { x: gravity.x * this.pole.body.mass(), y: gravity.y * this.pole.body.mass(), z: gravity.z * this.pole.body.mass() },
-      true,
-    );
+    this.pole = new Pole({ scene: this.world.scene, position, orientation });
   }
 
   private transportHeading(previousUp: THREE.Vector3, nextUp: THREE.Vector3): void {
