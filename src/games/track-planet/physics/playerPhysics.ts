@@ -143,7 +143,11 @@ export class PlayerPhysics {
     this.slidingIntensity = 0;
     this.sliding = false;
     if (desired.lengthSq() < 0.0001) {
-      this.velocity.copy(tangentVelocity);
+      const normalForceN = this.getNormalForceLbf() * 4.4482216152605;
+      const kineticLimit = this.options.kineticFrictionCoefficient * normalForceN / Math.max(this.playerMassKg, 0.001);
+      const currentSpeed = tangentVelocity.length();
+      const slowedSpeed = Math.max(0, currentSpeed - kineticLimit * dt);
+      this.velocity.copy(currentSpeed > 0.0001 ? tangentVelocity.setLength(slowedSpeed) : new THREE.Vector3());
       return;
     }
 
