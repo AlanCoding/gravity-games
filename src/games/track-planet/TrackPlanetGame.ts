@@ -516,6 +516,18 @@ export class TrackPlanetGame {
 
   private getRocketThrustDirection(snapshot: PlayerPhysicsSnapshot): THREE.Vector3 {
     const radialUp = snapshot.radialUp;
+    const cameraForward = new THREE.Vector3();
+    this.world.camera.getWorldDirection(cameraForward);
+    if (cameraForward.lengthSq() > 0.000001) {
+      const outwardComponent = cameraForward.dot(radialUp);
+      if (outwardComponent < -0.35) {
+        cameraForward.addScaledVector(radialUp, -outwardComponent - 0.35);
+      }
+      if (cameraForward.lengthSq() > 0.000001) {
+        return cameraForward.normalize();
+      }
+    }
+
     const tangentFromHeading = this.heading.clone().projectOnPlane(radialUp);
     if (tangentFromHeading.lengthSq() > 0.000001) {
       return tangentFromHeading.normalize();
