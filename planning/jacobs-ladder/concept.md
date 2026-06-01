@@ -7,9 +7,9 @@ spacecraft in a shared orbital plane that move mass up and down a gravity well. 
 but that phrase is overloaded and may not be the right game title. "Beanstalk" better matches Hop David's terminology
 for moon elevators and "Conductor" points at the timing/railroad role the player actually has.
 
-The starting body should be a generic fictional planet rather than Earth, because the first launch is a surface space
-gun. The space-gun launch is visually clear and useful for the game even though it would be unrealistic for an Earth
-launch.
+The starting body should be a generic fictional rocky planet rather than Earth, because the first launch is a surface
+space gun. The planet should read as blue and green, but it does not need to represent a specific real planet. The
+space-gun launch is visually clear and useful for the game even though it would be unrealistic for an Earth launch.
 
 The mechanical premise is deliberately physical:
 
@@ -71,6 +71,29 @@ of hiding it.
 - keep the pace slow and readable
 - only one active transfer should happen at a time
 - require multiple stages from the first playable prototype
+- use a static overall view rather than zooming between stages
+- keep this larger and less mobile-oriented than Track Planet
+- avoid extra surrounding page chrome; put more content inside the game rectangle itself
+
+## Naming and customer
+
+The beanstalk is public infrastructure, but the major customer is effectively one fleet organization. Avoid "Starfleet"
+because it is too close to Star Trek.
+
+Possible customer/fleet names:
+
+- Stellar Admiralty
+- Crown Fleet
+- Meridian Fleet
+- Orbital Navy
+- Deep Space Service
+- Helio Command
+- Commonwealth Fleet
+- Starward Logistics Command
+- The Admiralty
+
+The simplest current direction is to use "the Admiralty" in dialog and "Stellar Admiralty" when the institution needs a
+proper name.
 
 ## Player controls
 
@@ -80,6 +103,7 @@ Allowed control:
 
 - select an available upmass or downmass
 - trigger the next progression at a chosen time
+- use mostly arrow keys and Enter
 
 Not allowed, at least initially:
 
@@ -90,6 +114,15 @@ Not allowed, at least initially:
 
 Barbells may theoretically be influenced by moving endpoint masses in and out, but that control space is explicitly out
 of scope for the first game design.
+
+Control presentation:
+
+- Up/Down cycles through selectable masses by orbital radius
+- Left/Right can switch between upmass/downmass choices or nearby candidates
+- Enter advances the currently highlighted mass at that exact time
+- controls should be explained below the game screen
+
+Upmass and downmass should be simple colored circles. They should use distinct colors.
 
 ## Barbell physics
 
@@ -118,6 +151,14 @@ Tether length is not arbitrary. In the clean design, each tether length should b
 puts payloads into the intended transfer window. There will still be some relative velocity at catch even in the ideal
 case, and that relative velocity should get worse as accumulated perturbations build up during play.
 
+Pre-positioning logic:
+
+- choose orbit radii based on visual and gameplay needs
+- compute barbell lengths so releases produce the intended Hohmann-style transfers
+- pre-position barbells and endpoints so the first set of tosses basically cannot go wrong
+- use the same setup with or without the tutorial
+- let later mass transfers disturb orbital parameters and rotation over time
+
 ## Economy
 
 The objective is to make money by delivering mass out of the gravity well.
@@ -141,6 +182,10 @@ This creates the tycoon loop:
 Everything should ultimately map to money rather than hard failure. A bad transfer can still attach, cause damage, and
 make the simulation wobble badly. The player loses money and watches the system degrade rather than getting a clean
 "game over" immediately.
+
+Money and stats should be displayed constantly in the top-left of the game rectangle.
+
+The top-right should show the admiral/customer portrait and a text reaction to recent action.
 
 ## Catch and prediction model
 
@@ -172,6 +217,13 @@ There can be multiple upmasses and downmasses in the system, but for visual and 
 The player should always be choosing between currently available upmass/downmass timing opportunities rather than
 managing many simultaneous moving pieces.
 
+There is an infinite upmass source at the stationary surface launch site. This can inject unlimited new upmasses into
+the system, whether or not that is a good idea.
+
+There is a station above the top tether, currently called "Stellar Admiralty Central", which provides infinite downmass.
+The balancing problem is the point: upmass and downmass physically need to match over time, but they create funny wobble
+and financial tradeoffs.
+
 ## First playable shape
 
 The first playable version must include multiple barbell stages. A single-stage prototype is not enough to express the
@@ -184,6 +236,38 @@ The early flow should be:
 - subsequent transfers naturally accumulate wobble and damage
 - the admiral's reaction makes the degradation legible and funny
 
+The first screen should offer:
+
+- start immediately
+- tutorial
+
+The tutorial should be developed first. It should include text backstory and later images. It can use the pre-positioned
+ideal setup and should explain the steady-state operation before the messy version starts.
+
+## Dialog and image prompts
+
+This game should use more text than Track Planet. The admiral/customer character is part of the game loop.
+
+Dialog/image direction:
+
+- the admiral appears in the top-right
+- dialog reacts to each catch, loss, damage event, or strong performance
+- reactions are based on both current action and total money
+- if total money is high, a loss can still get a composed, encouraging reaction
+- if total money is low, poor performance should generate exaggerated panic or near-ruin reactions
+- art should be cartoony rather than realistic
+
+For each dialog beat, create an accompanying image prompt in a prompts folder. These prompts should be written before
+image generation. Later, when the game is closer to finished, the prompts can be used with available image-generation
+credits.
+
+Before the steady-state operation is demoed, aim for about 3-4 dialog/image beats:
+
+- tutorial/backstory opening
+- first clean successful catch
+- visible damage or wobble after a mediocre catch
+- near-ruin reaction after poor performance while low on money
+
 ## Early questions to solve
 
 - how many stages the first playable version needs
@@ -194,6 +278,8 @@ The early flow should be:
 - how catch damage maps from relative velocity to money loss
 - how failed delivery penalties are computed
 - how the admiral's emotional state maps to profit, damage, and chaos
+- what the first 3-4 admiral dialog beats should say
+- where to put the prompt files once implementation begins
 
 ## Relation to other games
 
