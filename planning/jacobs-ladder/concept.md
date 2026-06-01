@@ -7,9 +7,9 @@ spacecraft in a shared orbital plane that move mass up and down a gravity well. 
 but that phrase is overloaded and may not be the right game title. "Beanstalk" better matches Hop David's terminology
 for moon elevators and "Conductor" points at the timing/railroad role the player actually has.
 
-The starting body should be a generic fictional rocky planet rather than Earth, because the first launch is a surface
-space gun. The planet should read as blue and green, but it does not need to represent a specific real planet. The
-space-gun launch is visually clear and useful for the game even though it would be unrealistic for an Earth launch.
+The starting body is `Civic Prime`, a generic fictional rocky planet. The first launch is a surface space gun. The
+planet should read as blue and green, but it does not need to represent a specific real planet. The space-gun launch is
+visually clear and useful for the game even though it would be unrealistic for an Earth launch.
 
 The mechanical premise is deliberately physical:
 
@@ -56,7 +56,7 @@ simulation causes the machinery to wobble under the consequences of its own mass
 - the system should visibly fight itself through wobble, load transfer, and timing mismatch
 - the comedy comes from the physics doing the damage honestly
 
-This should be framed as a space-tycoon problem. A space admiral customer watches from the corner of the UI and reacts
+This should be framed as a space-tycoon problem. `Admiral Voss` watches from the corner of the UI and reacts
 emotionally to performance, damage, and failed deliveries.
 
 The underlying real-world control problem is intentionally not solved here. The game should expose the absurdity instead
@@ -77,23 +77,34 @@ of hiding it.
 
 ## Naming and customer
 
-The beanstalk is public infrastructure, but the major customer is effectively one fleet organization. Avoid "Starfleet"
-because it is too close to Star Trek.
+Settled names:
 
-Possible customer/fleet names:
+- game title: `Beanstalk Conductor`
+- planet: `Civic Prime`
+- fleet customer: `Starward Logistics Command`
+- top station: `Fleet Central`
+- government body: `Office of Extraterrestrial Conveyance`
+- absurd official title: `Deputy Undersecretary for Orbital Uplift`
+- infrastructure operator: `Public Beanstalk Works`
+- original elevator project: `Strategic Space Elevator Initiative`
+- compromised beanstalk project: `Emergency Vertical Access Compromise`
+- admiral/customer character: `Admiral Voss`
 
-- Stellar Admiralty
-- Crown Fleet
-- Meridian Fleet
-- Orbital Navy
-- Deep Space Service
-- Helio Command
-- Commonwealth Fleet
-- Starward Logistics Command
-- The Admiralty
+The beanstalk is public infrastructure operated by `Public Beanstalk Works`, but the major customer is effectively
+`Starward Logistics Command`.
 
-The simplest current direction is to use "the Admiralty" in dialog and "Stellar Admiralty" when the institution needs a
-proper name.
+## Backstory
+
+The `Deputy Undersecretary for Orbital Uplift` demanded that `Civic Prime` build a proper space elevator under the
+`Strategic Space Elevator Initiative`. Engineers explained that this was not physically practical on the schedule the
+government had already announced.
+
+The watered-down version is the `Emergency Vertical Access Compromise`: a public beanstalk system that is not exactly
+the promised space elevator, but is close enough for the press release if nobody asks too many questions.
+
+Unfortunately, the `Office of Extraterrestrial Conveyance` has already borrowed heavily, space congress is angry about
+not getting the real elevator, and `Starward Logistics Command` still needs a fleet built. `Admiral Voss` is waiting at
+`Fleet Central`, and the compromise beanstalk had better work perfectly.
 
 ## Player controls
 
@@ -220,7 +231,7 @@ managing many simultaneous moving pieces.
 There is an infinite upmass source at the stationary surface launch site. This can inject unlimited new upmasses into
 the system, whether or not that is a good idea.
 
-There is a station above the top tether, currently called "Stellar Admiralty Central", which provides infinite downmass.
+There is a station above the top tether, `Fleet Central`, which provides infinite downmass.
 The balancing problem is the point: upmass and downmass physically need to match over time, but they create funny wobble
 and financial tradeoffs.
 
