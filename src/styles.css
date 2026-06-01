@@ -256,6 +256,36 @@ h1 {
   line-height: 1.65;
 }
 
+.metrics-list {
+  margin: 0;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.metrics-list div {
+  display: grid;
+  grid-template-columns: 9rem minmax(0, 1fr);
+  gap: 0.8rem;
+  align-items: baseline;
+  padding-top: 0.55rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.metrics-list dt,
+.metrics-list dd {
+  margin: 0;
+}
+
+.metrics-list dt {
+  color: #eac460;
+  font-weight: 800;
+}
+
+.metrics-list dd {
+  color: #d7e1de;
+  line-height: 1.45;
+}
+
 .static-nav {
   min-height: auto;
 }
@@ -557,6 +587,11 @@ h1 {
   }
 
   .controls-list div {
+    grid-template-columns: 1fr;
+    gap: 0.2rem;
+  }
+
+  .metrics-list div {
     grid-template-columns: 1fr;
     gap: 0.2rem;
   }

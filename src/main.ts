@@ -187,6 +187,41 @@ function renderTrackPlanetBackground(): void {
         <p>I told a person or two about my daydreams but they mostly ignored me. Now, with AI, I can have the game for the daydream I had. To be clear, I know the physics of the situation, and it demands a planet with an absurdly high density that no ordinary atomic matter can provide. So we have to imagine that it has a black hole in the center. There's also no clear way to hold atmosphere in, but in this game, I didn't even bother with air resistance anyway. That would just make it less fun to orbit.</p>
       </article>
 
+      <article class="story-section" aria-labelledby="trackPlanetPhysicsHeading">
+        <h2 id="trackPlanetPhysicsHeading">Physics</h2>
+        <p>The planet has a circumference of 400 meters, so the radius is computed from that: 400 / (2 * pi), or about 63.66 meters. The game uses custom radial gravity toward the planet center, not a normal flat-world downward gravity vector.</p>
+        <p>The running model uses a speed envelope where acceleration falls as speed rises: a_drive(v) = a_ref * max(0, 1 - (v / v_ref)^q). The player weighs 150 lbf at rest, and the normal force drops as tangent speed rises around the planet. When the requested motion exceeds traction, the player slides under a kinetic-friction rule.</p>
+        <p>Shot puts and player orbit checks use orbital geometry instead of a flat projectile shortcut. Pole vaulting is deliberately simple: while the key is held on the surface, it gradually converts horizontal velocity into vertical velocity.</p>
+      </article>
+
+      <article class="story-section" aria-labelledby="trackPlanetAiHeading">
+        <h2 id="trackPlanetAiHeading">AI use</h2>
+        <p>This game was built through a long AI-assisted coding conversation. Almost the entire thread was spent on Track Planet: first getting the Vite app running, then building the spherical planet, then refining the track, bleachers, player movement, shot puts, powerups, achievements, and this background page.</p>
+        <p>The first basic set of objectives has been accomplished. The game has a playable core loop, custom physics, one-shot powerups, cookie-backed achievements, a rocket pack, pole vaulting, shot put throws, and a dedicated background page. What remains is mostly tuning, debugging, and presentation cleanup.</p>
+        <dl class="metrics-list">
+          <div>
+            <dt>User prompts</dt>
+            <dd>About 100 in this thread, with the large majority about Track Planet.</dd>
+          </div>
+          <div>
+            <dt>Context windows</dt>
+            <dd>At least 1 context compaction, plus 1 model transition while the game was being developed.</dd>
+          </div>
+          <div>
+            <dt>Conversation length</dt>
+            <dd>Well over 1,000 lines of transcript after compaction and summaries are included.</dd>
+          </div>
+          <div>
+            <dt>Context used</dt>
+            <dd>Roughly tens of thousands of tokens in the active compacted thread, and substantially more across the full development conversation.</dd>
+          </div>
+          <div>
+            <dt>Validation loop</dt>
+            <dd>Most code changes were checked with npm test, npm run build, or both.</dd>
+          </div>
+        </dl>
+      </article>
+
       <nav class="index-links static-nav" aria-label="Track Planet navigation">
         <a class="index-link" href="#track-planet">
           <strong>Go to game</strong>
