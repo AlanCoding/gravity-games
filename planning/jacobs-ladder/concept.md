@@ -1,11 +1,15 @@
-# Jacob's Ladder
+# Beanstalk Conductor
 
 ## Core idea
 
-Jacob's Ladder is a future gravity game about a series of tidally locked barbell spacecraft in a shared orbital plane
-that move mass up and down a gravity well. The starting body should be a generic fictional planet rather than Earth,
-because the first launch is a surface space gun. The space-gun launch is visually clear and useful for the game even
-though it would be unrealistic for an Earth launch.
+Beanstalk Conductor is the current working title for a future gravity game about a series of tidally locked barbell
+spacecraft in a shared orbital plane that move mass up and down a gravity well. Earlier notes used "Jacob's Ladder",
+but that phrase is overloaded and may not be the right game title. "Beanstalk" better matches Hop David's terminology
+for moon elevators and "Conductor" points at the timing/railroad role the player actually has.
+
+The starting body should be a generic fictional planet rather than Earth, because the first launch is a surface space
+gun. The space-gun launch is visually clear and useful for the game even though it would be unrealistic for an Earth
+launch.
 
 The mechanical premise is deliberately physical:
 
@@ -30,13 +34,16 @@ The player should not choose a launch angle or target manually. The game compute
 endpoint of the next stage tether at the opposite side of the orbit, equivalent to the 180-degree Hohmann-transfer
 picture in the ideal case. The player chooses when to commit that computed transfer.
 
-Reference checkpoint:
+Reference checkpoints:
 
-- Hop David, "Tran Cislunar Railroad": https://hopsblog-hop.blogspot.com/2016/08/tran-cislunar-railroad.html
+- Primary reference: Hop David, "Mini Solar Systems": https://hopsblog-hop.blogspot.com/2013/01/mini-solar-systems.html
+- Secondary reference: Hop David, "Tran Cislunar Railroad": https://hopsblog-hop.blogspot.com/2016/08/tran-cislunar-railroad.html
 
-That reference describes a three-tether Earth/cislunar concept. Jacob's Ladder is not locked to three stages. The stage
-count should be chosen for game feel, readability, and pacing. Three stages may be enough, but the game can use more if
-that makes the ladder more satisfying.
+The primary reference discusses transfer ellipses between Saturn moon beanstalks and Galilean moon beanstalks, with
+tidally locked moons and planet-moon L1/L2 regions as the conceptual anchor. The cislunar railroad reference describes a
+three-tether Earth/cislunar concept. This game is not locked to three stages. The stage count should be chosen for game
+feel, readability, and pacing. Three stages may be enough, but the game can use more if that makes the ladder more
+satisfying.
 
 ## Intended humor
 
@@ -190,4 +197,5 @@ The early flow should be:
 
 ## Relation to other games
 
-Jacob's Ladder is a separate game idea from Track Planet and should keep its own notes, assets, and planning space under `planning/jacobs-ladder/`.
+Beanstalk Conductor is a separate game idea from Track Planet and should keep its own notes, assets, and planning space
+under `planning/jacobs-ladder/` unless the folder is renamed later.
