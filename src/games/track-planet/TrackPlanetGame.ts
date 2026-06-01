@@ -710,18 +710,18 @@ export class TrackPlanetGame {
         firstThrowSeen = true;
         if (this.firstThrowFired) {
           this.firstThrowFired = false;
-          console.info('Track Planet event: first throw');
+          this.achievements.onFirstShotPut?.(this.payload(snapshot));
         }
       }
 
       const airtime = this.elapsed - shotPut.physics.startTime;
       if (!this.tenSecondAirtimeFired && airtime >= 10) {
         this.tenSecondAirtimeFired = true;
-        console.info('Track Planet event: 10 second airtime');
+        this.achievements.onShotPutTenSecondAirtime?.(this.payload(snapshot));
       }
       if (!this.orbitThrowFired && shotPut.physics.getSurfaceDistance() >= PLANET_CIRCUMFERENCE_METERS) {
         this.orbitThrowFired = true;
-        console.info('Track Planet event: complete one orbit throw');
+        this.achievements.onShotPutOneOrbit?.(this.payload(snapshot));
       }
 
       const orbitMetrics = shotPut.physics.getOrbitMetrics();
@@ -743,7 +743,7 @@ export class TrackPlanetGame {
       }
       if (!this.bounceFiveFired && shotPut.physics.bounceCount >= 5) {
         this.bounceFiveFired = true;
-        console.info('Track Planet event: bounce 5 times');
+        this.achievements.onShotPutFiveBounces?.(this.payload(snapshot));
       }
     }
   }

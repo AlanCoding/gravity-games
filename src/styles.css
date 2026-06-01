@@ -132,11 +132,63 @@ h1 {
   font-size: 1rem;
 }
 
+.achievement-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.small-button {
+  min-height: 2rem;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.86rem;
+}
+
+.achievement-progress {
+  margin: 0;
+  color: #a5c8cb;
+  font-size: 0.9rem;
+}
+
 .achievement-list {
   margin: 0;
-  padding-left: 1.1rem;
+  padding: 0;
+  list-style: none;
   color: #d7e1de;
-  line-height: 1.45;
+  line-height: 1.35;
+}
+
+.achievement-list li {
+  display: grid;
+  grid-template-columns: 5.3rem minmax(0, 1fr);
+  gap: 0.65rem;
+  align-items: baseline;
+  padding: 0.42rem 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.achievement-list li:first-child {
+  border-top: 0;
+}
+
+.achievement-status {
+  color: #101417;
+  background: #eac460;
+  padding: 0.14rem 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.achievement-locked {
+  color: rgba(215, 225, 222, 0.62);
+}
+
+.achievement-locked .achievement-status {
+  color: #d7e1de;
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .game-page {

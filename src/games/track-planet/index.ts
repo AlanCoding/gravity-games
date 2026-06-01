@@ -1,4 +1,5 @@
 import { createAchievementHooks } from './achievements';
+import { type TrackPlanetAchievementId } from './achievements';
 import { TrackPlanetGame } from './TrackPlanetGame';
 
 export const trackPlanetGame = {
@@ -17,9 +18,10 @@ export const trackPlanetGame = {
     powerupDisplay: HTMLElement | null;
     timeDisplay: HTMLElement | null;
     achievementNotifier?: (message: string) => void;
+    achievementUnlocker?: (id: TrackPlanetAchievementId) => void;
   }): TrackPlanetGame =>
     new TrackPlanetGame({
       ...options,
-      achievements: createAchievementHooks(options.achievementNotifier),
+      achievements: createAchievementHooks(options.achievementNotifier, options.achievementUnlocker),
     }),
 };

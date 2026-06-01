@@ -1,6 +1,10 @@
 import './styles.css';
 import trackPlanetBannerUrl from './games/track-planet/assets/track_planet.png';
 import { trackPlanetGame } from './games/track-planet';
+import {
+  TRACK_PLANET_ACHIEVEMENTS,
+  type TrackPlanetAchievementId,
+} from './games/track-planet/achievements';
 
 type RunningGame = {
   start: () => void;
@@ -18,6 +22,7 @@ if (!app) {
 const appElement = app;
 let currentGame: RunningGame | null = null;
 let achievementTimeout: number | null = null;
+const TRACK_PLANET_ACHIEVEMENT_COOKIE = 'gravity_games_track_planet_achievements';
 
 function stopCurrentGame(): void {
   if (currentGame) {
@@ -46,6 +51,7 @@ function startTrackPlanet(): void {
     powerupDisplay: document.querySelector<HTMLElement>('#powerupDisplay'),
     timeDisplay: document.querySelector<HTMLElement>('#timeDisplay'),
     achievementNotifier: flashAchievement,
+    achievementUnlocker: unlockTrackPlanetAchievement,
   });
   currentGame.start();
 }
@@ -106,33 +112,34 @@ function renderIndex(): void {
 
 function renderAchievements(): void {
   stopCurrentGame();
+  const unlocked = getTrackPlanetAchievements();
   appElement.innerHTML = `
     <section class="index-shell">
       <header class="index-header">
         <p class="eyebrow">Gravity Games</p>
         <h1>Achievements</h1>
-        <p class="page-copy">These are the current milestones we’re tracking for Track Planet and the wider Gravity Games set.</p>
+        <p class="page-copy">Unlocked achievements are saved in this browser. Use the game reset if you want to start a new run, or reset achievements here for a clean slate.</p>
       </header>
 
       <section class="achievement-catalog" aria-label="Achievement list">
         <article class="achievement-card">
-          <h2>Track Planet</h2>
+          <div class="achievement-card-header">
+            <h2>Track Planet</h2>
+            <button class="small-button" id="resetTrackPlanetAchievements" type="button">Reset</button>
+          </div>
+          <p class="achievement-progress">${unlocked.size} / ${TRACK_PLANET_ACHIEVEMENTS.length} unlocked</p>
           <ul class="achievement-list">
-            <li>Jump</li>
-            <li>Reach orbit as the player when perigee altitude stays above the planet</li>
-            <li>Coming in for landing</li>
-            <li>Escape as the player</li>
-            <li>Throw a shot put</li>
-            <li>Shot put reaches orbit</li>
-            <li>Shot put escapes</li>
-            <li>Complete one orbit throw</li>
-            <li>Ten second airtime throw</li>
-            <li>Bounce a shot put five times</li>
-            <li>Run 100 m in under 9.9 s</li>
-            <li>"Your father ran the 100m in ten flat"</li>
-            <li>"Well, I&#39;ll run it in 9.9"</li>
-            <li>Record a 100 m time</li>
-            <li>Record a 400 m time</li>
+            ${TRACK_PLANET_ACHIEVEMENTS
+              .map(achievement => {
+                const isUnlocked = unlocked.has(achievement.id);
+                return `
+                  <li class="${isUnlocked ? 'achievement-unlocked' : 'achievement-locked'}">
+                    <span class="achievement-status">${isUnlocked ? 'Unlocked' : 'Locked'}</span>
+                    <span>${escapeHtml(achievement.title)}</span>
+                  </li>
+                `;
+              })
+              .join('')}
           </ul>
         </article>
 
@@ -157,6 +164,11 @@ function renderAchievements(): void {
       </nav>
     </section>
   `;
+
+  document.querySelector<HTMLButtonElement>('#resetTrackPlanetAchievements')?.addEventListener('click', () => {
+    resetTrackPlanetAchievements();
+    renderAchievements();
+  });
 }
 
 function renderTrackPlanet(): void {
@@ -269,3 +281,55 @@ function renderRoute(): void {
 
 window.addEventListener('hashchange', renderRoute);
 renderRoute();
+
+function unlockTrackPlanetAchievement(id: TrackPlanetAchievementId): void {
+  const unlocked = getTrackPlanetAchievements();
+  if (unlocked.has(id)) {
+    return;
+  }
+  unlocked.add(id);
+  setCookie(TRACK_PLANET_ACHIEVEMENT_COOKIE, JSON.stringify([...unlocked]), 60 * 60 * 24 * 365);
+}
+
+function getTrackPlanetAchievements(): Set<TrackPlanetAchievementId> {
+  const raw = getCookie(TRACK_PLANET_ACHIEVEMENT_COOKIE);
+  if (!raw) {
+    return new Set();
+  }
+  try {
+    const ids = JSON.parse(raw);
+    if (!Array.isArray(ids)) {
+      return new Set();
+    }
+    const validIds = new Set(TRACK_PLANET_ACHIEVEMENTS.map(achievement => achievement.id));
+    return new Set(ids.filter((id): id is TrackPlanetAchievementId => validIds.has(id)));
+  } catch {
+    return new Set();
+  }
+}
+
+function resetTrackPlanetAchievements(): void {
+  setCookie(TRACK_PLANET_ACHIEVEMENT_COOKIE, '', 0);
+}
+
+function getCookie(name: string): string | null {
+  const prefix = `${encodeURIComponent(name)}=`;
+  const match = document.cookie
+    .split(';')
+    .map(cookie => cookie.trim())
+    .find(cookie => cookie.startsWith(prefix));
+  return match ? decodeURIComponent(match.slice(prefix.length)) : null;
+}
+
+function setCookie(name: string, value: string, maxAgeSeconds: number): void {
+  document.cookie = `${encodeURIComponent(name)}=${encodeURIComponent(value)}; max-age=${maxAgeSeconds}; path=/; samesite=lax`;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
