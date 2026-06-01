@@ -90,7 +90,7 @@ function renderIndex(): void {
         ${games
           .map(
             game => `
-              <a class="index-link" href="#${game.id}">
+              <a class="index-link" href="${game.id === 'track-planet' ? '#track-planet-background' : `#${game.id}`}">
                 <strong>${game.title}</strong>
                 <span>${game.description}</span>
               </a>
@@ -171,6 +171,36 @@ function renderAchievements(): void {
   });
 }
 
+function renderTrackPlanetBackground(): void {
+  stopCurrentGame();
+  appElement.innerHTML = `
+    <section class="static-page">
+      <header class="static-hero">
+        <p class="eyebrow">Track Planet background</p>
+        <h1>Track Planet</h1>
+        <a class="go-to-game-link" href="#track-planet">Go to game</a>
+      </header>
+
+      <article class="story-section" aria-labelledby="trackPlanetMotivationHeading">
+        <h2 id="trackPlanetMotivationHeading">Motivation</h2>
+        <p>In high school I ran cross-country and track all 4 years. Senior year, I remember daydreaming constantly about the numbers from the 400 meter track. What if, I wondered, you could have a track with no turns at all? This isn't totally possible, but you could have it curve vertically instead of horizontally. But this would require having an entire planet dedicated to the track, where it has 1 Earth gravity at the surface and a circumference of 400 meters. This planet would have all kinds of absurd physics, like how the faster you ran the easier it would be to continue running because your weight decreases. Then if you threw the shot put fast enough it could potentially reach orbit.</p>
+        <p>I told a person or two about my daydreams but they mostly ignored me. Now, with AI, I can have the game for the daydream I had. To be clear, I know the physics of the situation, and it demands a planet with an absurdly high density that no ordinary atomic matter can provide. So we have to imagine that it has a black hole in the center. There's also no clear way to hold atmosphere in, but in this game, I didn't even bother with air resistance anyway. That would just make it less fun to orbit.</p>
+      </article>
+
+      <nav class="index-links static-nav" aria-label="Track Planet navigation">
+        <a class="index-link" href="#track-planet">
+          <strong>Go to game</strong>
+          <span>Open the playable Track Planet page.</span>
+        </a>
+        <a class="index-link secondary-link" href="/gravity-games/">
+          <strong>Gravity Games</strong>
+          <span>Return to the game index.</span>
+        </a>
+      </nav>
+    </section>
+  `;
+}
+
 function renderTrackPlanet(): void {
   stopCurrentGame();
   appElement.innerHTML = `
@@ -186,7 +216,7 @@ function renderTrackPlanet(): void {
           <div class="game-banner-copy">
             <div class="game-banner-title">
               <a class="eyebrow game-home-link" href="/gravity-games/">Gravity Games</a>
-              <h1>Track Planet</h1>
+              <h1><a class="game-title-link" href="#track-planet-background">Track Planet</a></h1>
               <p class="page-copy">Pole vault, throw shot put balls into orbit, rocket into oblivion.</p>
             </div>
             <div class="readout" aria-live="polite">
@@ -268,6 +298,11 @@ function renderTrackPlanet(): void {
 function renderRoute(): void {
   if (window.location.hash === '#track-planet') {
     renderTrackPlanet();
+    return;
+  }
+
+  if (window.location.hash === '#track-planet-background') {
+    renderTrackPlanetBackground();
     return;
   }
 

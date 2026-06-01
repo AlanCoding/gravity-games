@@ -74,8 +74,15 @@ button {
 }
 
 .game-home-link:hover,
-.game-home-link:focus-visible {
+.game-home-link:focus-visible,
+.game-title-link:hover,
+.game-title-link:focus-visible {
   color: #eac460;
+}
+
+.game-title-link {
+  color: inherit;
+  text-decoration: none;
 }
 
 h1,
@@ -189,6 +196,68 @@ h1 {
 .achievement-locked .achievement-status {
   color: #d7e1de;
   background: rgba(255, 255, 255, 0.12);
+}
+
+.static-page {
+  width: min(920px, 100%);
+  min-height: 100vh;
+  margin: 0 auto;
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+  padding: clamp(1rem, 3vw, 2rem);
+}
+
+.static-hero,
+.story-section {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(16, 20, 23, 0.8);
+  backdrop-filter: blur(18px);
+}
+
+.static-hero {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 0.8rem;
+  padding: clamp(1.25rem, 5vw, 3rem) 1rem;
+}
+
+.go-to-game-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 4.4rem;
+  padding: 0.85rem 1.4rem;
+  color: #101417;
+  background: #eac460;
+  font-size: clamp(2rem, 6vw, 4.6rem);
+  font-weight: 900;
+  line-height: 1;
+  text-align: center;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.story-section {
+  display: grid;
+  gap: 0.9rem;
+  padding: clamp(1rem, 3vw, 1.5rem);
+}
+
+.story-section h2 {
+  font-size: 1.2rem;
+}
+
+.story-section p {
+  margin: 0;
+  color: #d7e1de;
+  font-size: 1.04rem;
+  line-height: 1.65;
+}
+
+.static-nav {
+  min-height: auto;
 }
 
 .game-page {
