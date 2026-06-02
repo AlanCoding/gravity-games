@@ -2,10 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { createInitialBeanstalkSystem } from './initialState';
 import {
   type BarbellState,
+  add,
+  attachPayloadToEndpoint,
   computeBarbellDerivative,
+  detachEndpointMassAsPayload,
+  getBarbellAngularMomentumAbout,
   getEndpointState,
+  getPayloadAngularMomentumAbout,
+  getSystemAngularMomentumAbout,
   length,
   moveFillAcrossBarbell,
+  scale,
   stepSystem,
   sub,
   vec,
@@ -58,6 +65,13 @@ describe('barbell rigid-body model', () => {
     });
     const beforeInner = getEndpointState(original, 'inner');
     const beforeOuter = getEndpointState(original, 'outer');
+    const beforeAngularMomentum = getSystemAngularMomentumAbout({
+      timeSeconds: 0,
+      planetRadius: 48,
+      gravitationalParameter: 12000,
+      barbells: [original],
+      payloads: [],
+    });
     const moved = moveFillAcrossBarbell({
       barbell: original,
       kind: 'upmass',
@@ -73,6 +87,13 @@ describe('barbell rigid-body model', () => {
     expect(moved.outer.upmassTons).toBe(12);
     expect(length(sub(beforeOuter.position, beforeInner.position))).toBeCloseTo(20, 10);
     expect(length(sub(afterOuter.position, afterInner.position))).toBeCloseTo(20, 10);
+    expect(getSystemAngularMomentumAbout({
+      timeSeconds: 0,
+      planetRadius: 48,
+      gravitationalParameter: 12000,
+      barbells: [moved],
+      payloads: [],
+    })).toBeCloseTo(beforeAngularMomentum, 8);
     expect(length(sub(beforeInner.position, original.center))).not.toBeCloseTo(
       length(sub(afterInner.position, moved.center)),
       4,
@@ -90,5 +111,59 @@ describe('barbell rigid-body model', () => {
       expect(length(outer.position)).toBeGreaterThan(state.planetRadius);
       expect(length(sub(outer.position, inner.position))).toBeCloseTo(barbell.length, 10);
     }
+  });
+
+  it('detaches endpoint mass as a payload while conserving momentum', () => {
+    const original = makeBarbell({
+      outer: { upmassTons: 12, downmassTons: 0 },
+    });
+    const oldMomentum = scale(original.velocity, 172);
+    const oldAngularMomentum = getBarbellAngularMomentumAbout(original, original.center);
+    const detached = detachEndpointMassAsPayload({
+      barbell: original,
+      endpoint: 'outer',
+      kind: 'upmass',
+      massTons: 12,
+      payloadId: 'payload',
+      deltaVelocity: vec(0, 2),
+    });
+    const newMomentum = add(scale(detached.barbell.velocity, 160), scale(detached.payload.velocity, 12));
+    const newAngularMomentum = (
+      getBarbellAngularMomentumAbout(detached.barbell, original.center)
+      + getPayloadAngularMomentumAbout(detached.payload, original.center)
+    );
+
+    expect(detached.barbell.outer.upmassTons).toBe(0);
+    expect(length(sub(newMomentum, oldMomentum))).toBeLessThan(0.0001);
+    expect(Math.abs(newAngularMomentum - oldAngularMomentum)).toBeLessThan(0.0001);
+  });
+
+  it('attaches a payload at its grab position while conserving momentum', () => {
+    const original = makeBarbell();
+    const payload = {
+      id: 'payload',
+      kind: 'upmass' as const,
+      massTons: 12,
+      position: vec(115, 4),
+      velocity: vec(2, 13),
+    };
+    const finalCenter = scale(add(scale(original.center, 160), scale(payload.position, 12)), 1 / 172);
+    const oldMomentum = add(scale(original.velocity, 160), scale(payload.velocity, 12));
+    const oldAngularMomentum = (
+      getBarbellAngularMomentumAbout(original, finalCenter)
+      + getPayloadAngularMomentumAbout(payload, finalCenter)
+    );
+    const attached = attachPayloadToEndpoint({
+      barbell: original,
+      endpoint: 'outer',
+      payload,
+    });
+    const newMomentum = scale(attached.velocity, 172);
+    const newAngularMomentum = getBarbellAngularMomentumAbout(attached, attached.center);
+
+    expect(attached.outer.upmassTons).toBe(12);
+    expect(length(sub(attached.center, finalCenter))).toBeLessThan(0.0001);
+    expect(length(sub(newMomentum, oldMomentum))).toBeLessThan(0.0001);
+    expect(Math.abs(newAngularMomentum - oldAngularMomentum)).toBeLessThan(0.0001);
   });
 });

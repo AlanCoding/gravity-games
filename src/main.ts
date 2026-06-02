@@ -1,10 +1,15 @@
 import './styles.css';
 import trackPlanetBannerUrl from './games/track-planet/assets/track_planet.png';
 import { trackPlanetGame } from './games/track-planet';
+import { BeanstalkConductorGame } from './games/beanstalk-conductor/BeanstalkConductorGame';
 import {
   TRACK_PLANET_ACHIEVEMENTS,
   type TrackPlanetAchievementId,
 } from './games/track-planet/achievements';
+import {
+  BEANSTALK_ACHIEVEMENTS,
+  type BeanstalkAchievementId,
+} from './games/beanstalk-conductor/achievements';
 
 type RunningGame = {
   start: () => void;
@@ -22,9 +27,72 @@ if (!app) {
 const appElement = app;
 let currentGame: RunningGame | null = null;
 let achievementTimeout: number | null = null;
+let pageKeyController: AbortController | null = null;
 const TRACK_PLANET_ACHIEVEMENT_COOKIE = 'gravity_games_track_planet_achievements';
+const BEANSTALK_ACHIEVEMENT_COOKIE = 'gravity_games_beanstalk_conductor_achievements';
+
+const BEANSTALK_BACKSTORY_PANELS = [
+  {
+    title: 'The Promise',
+    image: 'backstory-01-promise.png',
+    paragraphs: [
+      'The Deputy Undersecretary for Orbital Uplift announced the Strategic Space Elevator Initiative.',
+      'Civic Prime would build a proper space elevator. The speeches were confident. The diagrams were vertical. The borrowing was already underway.',
+    ],
+  },
+  {
+    title: 'The Engineering Meeting',
+    image: 'backstory-02-engineering-meeting.png',
+    paragraphs: [
+      'The engineers explained that the promised elevator was not physically practical on the promised schedule.',
+      'This was received as a communications problem.',
+    ],
+  },
+  {
+    title: 'The Compromise',
+    image: 'backstory-03-compromise.png',
+    paragraphs: [
+      'The Office of Extraterrestrial Conveyance introduced the Emergency Vertical Access Compromise.',
+      'It was not the space elevator anyone had promised. It was, however, close enough for the press release if nobody asked too many follow-up questions.',
+    ],
+  },
+  {
+    title: 'The Clean Beanstalk',
+    image: 'backstory-04-clean-beanstalk.png',
+    paragraphs: [
+      'The public version looked elegant.',
+      'Launch upmass from Civic Prime. Catch it with a barbell stage. Move it outward. Send downmass back. Keep the ladder balanced. Build the fleet.',
+    ],
+  },
+  {
+    title: 'Fleet Central',
+    image: 'backstory-05-fleet-central.png',
+    paragraphs: [
+      'Starward Logistics Command needed mass delivered upward.',
+      'Fleet Central would accept useful cargo and provide downmass for the return flow. This sounded balanced, which is a dangerous thing for an orbital system to sound.',
+    ],
+  },
+  {
+    title: 'Admiral Voss',
+    image: 'backstory-06-admiral-voss.png',
+    paragraphs: [
+      'Admiral Voss was assigned to observe operations.',
+      'Space congress was angry. The money was borrowed. The compromise beanstalk had better work perfectly.',
+    ],
+  },
+  {
+    title: 'Your Console',
+    image: 'backstory-07-console.png',
+    paragraphs: [
+      'You do not steer the payloads.',
+      'You choose when to commit each transfer. The solver computes the shot. The bill arrives afterward.',
+    ],
+  },
+];
 
 function stopCurrentGame(): void {
+  pageKeyController?.abort();
+  pageKeyController = null;
   if (currentGame) {
     currentGame.stop();
     currentGame = null;
@@ -90,13 +158,23 @@ function renderIndex(): void {
         ${games
           .map(
             game => `
-              <a class="index-link" href="${game.id === 'track-planet' ? '#track-planet-background' : `#${game.id}`}">
-                <strong>${game.title}</strong>
-                <span>${game.description}</span>
-              </a>
+              <article class="index-link game-entry">
+                <a class="index-entry-main" href="#${game.id}">
+                  <strong>${game.title} <span class="game-status game-status-complete">Feature complete</span></strong>
+                  <span>${game.description}</span>
+                </a>
+                ${game.id === 'track-planet' ? '<a class="entry-about-link" href="#track-planet-background">About Track Planet</a>' : ''}
+              </article>
             `,
           )
           .join('')}
+        <article class="index-link game-entry">
+          <a class="index-entry-main" href="#beanstalk-conductor">
+            <strong>Beanstalk Conductor <span class="game-status game-status-development">Early development</span></strong>
+            <span>Run a public beanstalk system until orbital operations get messy.</span>
+          </a>
+          <a class="entry-about-link" href="#beanstalk-conductor-about">About Beanstalk Conductor</a>
+        </article>
         <a class="index-link secondary-link" href="#achievements">
           <strong>Achievements</strong>
           <span>View the current goals and milestone list.</span>
@@ -110,9 +188,192 @@ function renderIndex(): void {
   `;
 }
 
+function renderBeanstalkConductorAbout(): void {
+  stopCurrentGame();
+  appElement.innerHTML = `
+    <section class="static-page">
+      <header class="static-hero">
+        <p class="eyebrow">Beanstalk Conductor background</p>
+        <h1>Beanstalk Conductor</h1>
+        <a class="go-to-game-link" href="#beanstalk-conductor">Go to game</a>
+      </header>
+
+      <article class="story-section" aria-labelledby="beanstalkAboutHeading">
+        <h2 id="beanstalkAboutHeading">About</h2>
+        <p>I'm a fan of Hop David's blog; his beanstalk concepts have always stuck with me as a good illustration.</p>
+        <p>However, these systems are usually described in their clean theoretical form.</p>
+        <p>To actually run this, I have a feeling you'll have an operational mess.</p>
+        <p>You catch and now your barbell has some wobble... when does that wobble get resolved? By the downmass, right? Umm, no, the downmass is to recover orbital losses. But the downmass can just do this too, right? I don't know if you have the numerical degrees of freedom to do that!</p>
+        <p>I really don't know!</p>
+        <p>Beanstalk Conductor is my attempt to formalize this academic question into a playable form. The off-kilter complications of the system are, in fact, the point.</p>
+        <p>The goal is not to dunk on the idea. I like the idea. But do I like the idea as a daydream? Or do I like it as something that could actually be used?</p>
+        <p>I don't have enough information to say either way. To be direct, that makes me trend bearish on the idea. But you know what they say, only one way to find out.</p>
+      </article>
+
+      <nav class="index-links static-nav" aria-label="Beanstalk Conductor navigation">
+        <a class="index-link" href="#beanstalk-conductor">
+          <strong>Go to game</strong>
+          <span>Open the Beanstalk Conductor page.</span>
+        </a>
+        <a class="index-link secondary-link" href="/gravity-games/">
+          <strong>Gravity Games</strong>
+          <span>Return to the game index.</span>
+        </a>
+      </nav>
+    </section>
+  `;
+}
+
+function renderBeanstalkConductorMenu(): void {
+  stopCurrentGame();
+  const unlocked = getBeanstalkAchievements();
+  const backstoryDone = unlocked.has('backstory-complete');
+  const tutorialDone = unlocked.has('tutorial-complete');
+  appElement.innerHTML = `
+    <section class="beanstalk-page">
+      <div class="achievement-toast" id="achievementToast" aria-live="polite" aria-atomic="true"></div>
+      <div class="beanstalk-menu-shell">
+        <div class="beanstalk-menu-art-wrap">
+          <canvas id="beanstalkMenuArt" class="beanstalk-menu-art" width="960" height="540" aria-hidden="true"></canvas>
+        </div>
+        <aside class="beanstalk-hud beanstalk-menu-panel" aria-label="Beanstalk Conductor menu">
+          <a class="eyebrow game-home-link" href="/gravity-games/">Gravity Games</a>
+          <h1><a class="game-title-link" href="#beanstalk-conductor-about">Beanstalk Conductor</a></h1>
+          <p class="page-copy">Public infrastructure, private timing decisions, and one increasingly concerned admiral.</p>
+          <nav class="beanstalk-menu-actions" aria-label="Beanstalk Conductor choices">
+            <a class="index-link beanstalk-menu-choice" href="#beanstalk-conductor-backstory">
+              <strong>Back story ${backstoryDone ? '<span class="completion-mark">Done</span>' : ''}</strong>
+              <span>Read the public works briefing.</span>
+            </a>
+            <a class="index-link beanstalk-menu-choice" href="#beanstalk-conductor-tutorial">
+              <strong>Tutorial ${tutorialDone ? '<span class="completion-mark">Done</span>' : '<span class="game-status game-status-development">TODO</span>'}</strong>
+              <span>Operator training placeholder.</span>
+            </a>
+            <a class="index-link beanstalk-menu-choice" href="#beanstalk-conductor-play">
+              <strong>Play</strong>
+              <span>Jump straight into live operations.</span>
+            </a>
+          </nav>
+        </aside>
+      </div>
+    </section>
+  `;
+  drawBeanstalkMenuArt();
+  bindBeanstalkMenuNavigation();
+}
+
+function renderBeanstalkBackstory(): void {
+  stopCurrentGame();
+  appElement.innerHTML = `
+    <section class="static-page beanstalk-story-page">
+      <div class="achievement-toast" id="achievementToast" aria-live="polite" aria-atomic="true"></div>
+      <header class="static-hero">
+        <p class="eyebrow">Beanstalk Conductor</p>
+        <h1>Back story</h1>
+        <p class="page-copy">The official explanation for the Emergency Vertical Access Compromise.</p>
+      </header>
+      <article class="story-section beanstalk-story-panel" id="beanstalkStoryPanel" tabindex="0" aria-live="polite"></article>
+    </section>
+  `;
+  bindBeanstalkBackstory();
+}
+
+function renderBeanstalkTutorial(): void {
+  stopCurrentGame();
+  appElement.innerHTML = `
+    <section class="static-page">
+      <div class="achievement-toast" id="achievementToast" aria-live="polite" aria-atomic="true"></div>
+      <header class="static-hero">
+        <p class="eyebrow">Beanstalk Conductor</p>
+        <h1>Tutorial</h1>
+        <p class="page-copy">TODO: operator training will go here after the live loop and backstory are stable.</p>
+      </header>
+      <article class="story-section">
+        <h2>Training placeholder</h2>
+        <p>The final tutorial needs guided timing, clean theoretical transfers, and an explanation of why your choices later make the system wobble. For now this page proves the menu and achievement wiring.</p>
+      </article>
+      <nav class="index-links static-nav" aria-label="Tutorial navigation">
+        <button class="index-link story-complete-button" id="completeBeanstalkTutorial" type="button">
+          <strong>Return to menu</strong>
+          <span>Mark the placeholder tutorial complete.</span>
+        </button>
+      </nav>
+    </section>
+  `;
+  document.querySelector<HTMLButtonElement>('#completeBeanstalkTutorial')?.addEventListener('click', () => {
+    completeBeanstalkTutorial();
+  });
+  bindEnterOrSpace('#completeBeanstalkTutorial', completeBeanstalkTutorial);
+}
+
+function renderBeanstalkConductorPlay(): void {
+  stopCurrentGame();
+  appElement.innerHTML = `
+    <section class="beanstalk-page">
+      <div class="achievement-toast" id="achievementToast" aria-live="polite" aria-atomic="true"></div>
+      <div class="beanstalk-shell">
+        <div class="beanstalk-game-stage">
+          <div id="beanstalkGameContainer" class="beanstalk-game-container" tabindex="0"></div>
+          <aside class="beanstalk-overlay beanstalk-overlay-left" aria-label="Beanstalk Conductor status">
+            <a class="eyebrow game-home-link" href="/gravity-games/">Gravity Games</a>
+            <h1><a class="game-title-link" href="#beanstalk-conductor-about">Beanstalk Conductor</a></h1>
+            <dl class="beanstalk-status">
+              <div>
+                <dt>Money</dt>
+                <dd id="beanstalkStats">5000 vBucks | t=0.0 s</dd>
+              </div>
+              <div>
+                <dt>Selection</dt>
+                <dd id="beanstalkSelection">loading transfer options</dd>
+              </div>
+            </dl>
+          </aside>
+          <aside class="beanstalk-overlay beanstalk-overlay-right" aria-label="Admiral Voss">
+            <strong>Admiral Voss</strong>
+            <p id="beanstalkAdmiral">Awaiting first transfer.</p>
+          </aside>
+        </div>
+      </div>
+
+      <section class="controls-panel beanstalk-controls" aria-labelledby="beanstalkControlsHeading">
+        <h2 id="beanstalkControlsHeading">Controls</h2>
+        <dl class="controls-list">
+          <div>
+            <dt>Arrow keys</dt>
+            <dd>Cycle available upmass and downmass timing opportunities</dd>
+          </div>
+          <div>
+            <dt>Enter / Space</dt>
+            <dd>Launch the selected transfer at the current time</dd>
+          </div>
+          <div>
+            <dt>Click</dt>
+            <dd>Launch the action for a visible source or occupied endpoint</dd>
+          </div>
+        </dl>
+      </section>
+    </section>
+  `;
+  const container = document.querySelector<HTMLElement>('#beanstalkGameContainer');
+  if (!container) {
+    throw new Error('Beanstalk Conductor markup is missing.');
+  }
+  currentGame = new BeanstalkConductorGame({
+    container,
+    statsDisplay: document.querySelector<HTMLElement>('#beanstalkStats'),
+    selectionDisplay: document.querySelector<HTMLElement>('#beanstalkSelection'),
+    admiralDisplay: document.querySelector<HTMLElement>('#beanstalkAdmiral'),
+    achievementNotifier: flashAchievement,
+    achievementUnlocker: unlockBeanstalkAchievement,
+  });
+  currentGame.start();
+  container.focus();
+}
+
 function renderAchievements(): void {
   stopCurrentGame();
-  const unlocked = getTrackPlanetAchievements();
+  const unlockedTrackPlanet = getTrackPlanetAchievements();
+  const unlockedBeanstalk = getBeanstalkAchievements();
   appElement.innerHTML = `
     <section class="index-shell">
       <header class="index-header">
@@ -127,11 +388,11 @@ function renderAchievements(): void {
             <h2>Track Planet</h2>
             <button class="small-button" id="resetTrackPlanetAchievements" type="button">Reset</button>
           </div>
-          <p class="achievement-progress">${unlocked.size} / ${TRACK_PLANET_ACHIEVEMENTS.length} unlocked</p>
+          <p class="achievement-progress">${unlockedTrackPlanet.size} / ${TRACK_PLANET_ACHIEVEMENTS.length} unlocked</p>
           <ul class="achievement-list">
             ${TRACK_PLANET_ACHIEVEMENTS
               .map(achievement => {
-                const isUnlocked = unlocked.has(achievement.id);
+                const isUnlocked = unlockedTrackPlanet.has(achievement.id);
                 return `
                   <li class="${isUnlocked ? 'achievement-unlocked' : 'achievement-locked'}">
                     <span class="achievement-status">${isUnlocked ? 'Unlocked' : 'Locked'}</span>
@@ -144,10 +405,23 @@ function renderAchievements(): void {
         </article>
 
         <article class="achievement-card">
-          <h2>Future Games</h2>
+          <div class="achievement-card-header">
+            <h2>Beanstalk Conductor</h2>
+            <button class="small-button" id="resetBeanstalkAchievements" type="button">Reset</button>
+          </div>
+          <p class="achievement-progress">${unlockedBeanstalk.size} / ${BEANSTALK_ACHIEVEMENTS.length} unlocked</p>
           <ul class="achievement-list">
-            <li>Reserved for game-specific milestones from later projects</li>
-            <li>Shared Gravity Games achievements page will grow with each new title</li>
+            ${BEANSTALK_ACHIEVEMENTS
+              .map(achievement => {
+                const isUnlocked = unlockedBeanstalk.has(achievement.id);
+                return `
+                  <li class="${isUnlocked ? 'achievement-unlocked' : 'achievement-locked'}">
+                    <span class="achievement-status">${isUnlocked ? 'Unlocked' : 'Locked'}</span>
+                    <span>${escapeHtml(achievement.title)}</span>
+                  </li>
+                `;
+              })
+              .join('')}
           </ul>
         </article>
       </section>
@@ -161,12 +435,20 @@ function renderAchievements(): void {
           <strong>Track Planet</strong>
           <span>Open the game directly.</span>
         </a>
+        <a class="index-link secondary-link" href="#beanstalk-conductor">
+          <strong>Beanstalk Conductor</strong>
+          <span>Open the current prototype.</span>
+        </a>
       </nav>
     </section>
   `;
 
   document.querySelector<HTMLButtonElement>('#resetTrackPlanetAchievements')?.addEventListener('click', () => {
     resetTrackPlanetAchievements();
+    renderAchievements();
+  });
+  document.querySelector<HTMLButtonElement>('#resetBeanstalkAchievements')?.addEventListener('click', () => {
+    resetBeanstalkAchievements();
     renderAchievements();
   });
 }
@@ -323,6 +605,197 @@ function renderTrackPlanet(): void {
   }
 }
 
+function drawBeanstalkMenuArt(): void {
+  const canvas = document.querySelector<HTMLCanvasElement>('#beanstalkMenuArt');
+  const ctx = canvas?.getContext('2d');
+  if (!canvas || !ctx) {
+    return;
+  }
+
+  const width = canvas.width;
+  const height = canvas.height;
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = '#050709';
+  ctx.fillRect(0, 0, width, height);
+
+  const centerX = width * 0.25;
+  const centerY = height * 0.55;
+  const planetRadius = 90;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, planetRadius, 0, Math.PI * 2);
+  ctx.fillStyle = '#356faa';
+  ctx.fill();
+  ctx.fillStyle = '#4c9b68';
+  ctx.beginPath();
+  ctx.ellipse(centerX - 28, centerY + 8, 35, 18, -0.4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(centerX + 30, centerY - 22, 26, 13, 0.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.save();
+  ctx.translate(centerX + planetRadius - 8, centerY - 18);
+  ctx.rotate(-0.25);
+  ctx.fillStyle = '#eac460';
+  ctx.fillRect(-10, -8, 28, 16);
+  ctx.fillStyle = '#d7e1de';
+  ctx.fillRect(10, -4, 35, 8);
+  ctx.restore();
+
+  const stageXs = [420, 560, 710];
+  const stageYs = [330, 250, 170];
+  for (let i = 0; i < stageXs.length; i += 1) {
+    const x = stageXs[i];
+    const y = stageYs[i];
+    ctx.strokeStyle = '#d7e1de';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(x - 58, y);
+    ctx.lineTo(x + 58, y);
+    ctx.stroke();
+    ctx.fillStyle = '#eef4f8';
+    ctx.beginPath();
+    ctx.arc(x - 58, y, 13, 0, Math.PI * 2);
+    ctx.arc(x + 58, y, 13, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#7dd3fc';
+    ctx.beginPath();
+    ctx.arc(x - 76, y - 18, 9, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#f59e0b';
+    ctx.beginPath();
+    ctx.arc(x + 76, y + 18, 9, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.fillStyle = '#0f172a';
+  ctx.strokeStyle = '#93c5fd';
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.rect(780, 82, 92, 52);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(742, 108);
+  ctx.lineTo(780, 108);
+  ctx.moveTo(872, 108);
+  ctx.lineTo(910, 108);
+  ctx.stroke();
+  ctx.fillStyle = '#dbeafe';
+  ctx.font = '700 20px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('Fleet Central', 826, 66);
+
+  ctx.strokeStyle = 'rgba(234, 196, 96, 0.45)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([8, 8]);
+  ctx.beginPath();
+  ctx.moveTo(centerX + planetRadius + 40, centerY - 20);
+  ctx.bezierCurveTo(360, 300, 480, 270, 560, 250);
+  ctx.bezierCurveTo(620, 225, 700, 175, 780, 108);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function completeBeanstalkBackstory(): void {
+  unlockBeanstalkAchievement('backstory-complete');
+  flashAchievement('Beanstalk Conductor: public works briefing complete');
+  window.location.hash = '#beanstalk-conductor';
+}
+
+function completeBeanstalkTutorial(): void {
+  unlockBeanstalkAchievement('tutorial-complete');
+  flashAchievement('Beanstalk Conductor: operator training complete');
+  window.location.hash = '#beanstalk-conductor';
+}
+
+function bindBeanstalkMenuNavigation(): void {
+  const choices = [...document.querySelectorAll<HTMLAnchorElement>('.beanstalk-menu-choice')];
+  if (choices.length === 0) {
+    return;
+  }
+  pageKeyController?.abort();
+  pageKeyController = new AbortController();
+  let selected = 0;
+  const updateSelection = (): void => {
+    choices.forEach((choice, index) => {
+      choice.classList.toggle('beanstalk-menu-choice-selected', index === selected);
+      choice.setAttribute('aria-current', index === selected ? 'true' : 'false');
+    });
+  };
+  updateSelection();
+  document.addEventListener('keydown', event => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
+      event.preventDefault();
+      selected = (selected + 1) % choices.length;
+      updateSelection();
+    } else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
+      event.preventDefault();
+      selected = (selected - 1 + choices.length) % choices.length;
+      updateSelection();
+    } else if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      choices[selected].click();
+    }
+  }, { signal: pageKeyController.signal });
+}
+
+function bindBeanstalkBackstory(): void {
+  const panel = document.querySelector<HTMLElement>('#beanstalkStoryPanel');
+  if (!panel) {
+    return;
+  }
+  pageKeyController?.abort();
+  pageKeyController = new AbortController();
+  let panelIndex = 0;
+  const renderPanel = (): void => {
+    const item = BEANSTALK_BACKSTORY_PANELS[panelIndex];
+    const isLast = panelIndex === BEANSTALK_BACKSTORY_PANELS.length - 1;
+    panel.innerHTML = `
+      <div class="story-image-placeholder" role="img" aria-label="${escapeHtml(item.title)} illustration placeholder">
+        <span>${escapeHtml(item.image)}</span>
+      </div>
+      <div class="beanstalk-story-copy">
+        <p class="eyebrow">Panel ${panelIndex + 1} / ${BEANSTALK_BACKSTORY_PANELS.length}</p>
+        <h2>${escapeHtml(item.title)}</h2>
+        ${item.paragraphs.map(paragraph => `<p>${escapeHtml(paragraph)}</p>`).join('')}
+        <button class="page-action-button story-advance-button" type="button">${isLast ? 'Return to menu' : 'Continue'}</button>
+      </div>
+    `;
+    panel.querySelector<HTMLButtonElement>('.story-advance-button')?.addEventListener('click', advance);
+  };
+  const advance = (): void => {
+    if (panelIndex >= BEANSTALK_BACKSTORY_PANELS.length - 1) {
+      completeBeanstalkBackstory();
+      return;
+    }
+    panelIndex += 1;
+    renderPanel();
+  };
+  renderPanel();
+  panel.focus();
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+    event.preventDefault();
+    advance();
+  }, { signal: pageKeyController.signal });
+}
+
+function bindEnterOrSpace(selector: string, handler: () => void): void {
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+    if (!document.querySelector(selector)) {
+      return;
+    }
+    event.preventDefault();
+    handler();
+  }, { once: true });
+}
+
 function renderRoute(): void {
   if (window.location.hash === '#track-planet') {
     renderTrackPlanet();
@@ -331,6 +804,31 @@ function renderRoute(): void {
 
   if (window.location.hash === '#track-planet-background') {
     renderTrackPlanetBackground();
+    return;
+  }
+
+  if (window.location.hash === '#beanstalk-conductor-about') {
+    renderBeanstalkConductorAbout();
+    return;
+  }
+
+  if (window.location.hash === '#beanstalk-conductor') {
+    renderBeanstalkConductorMenu();
+    return;
+  }
+
+  if (window.location.hash === '#beanstalk-conductor-backstory') {
+    renderBeanstalkBackstory();
+    return;
+  }
+
+  if (window.location.hash === '#beanstalk-conductor-tutorial') {
+    renderBeanstalkTutorial();
+    return;
+  }
+
+  if (window.location.hash === '#beanstalk-conductor-play') {
+    renderBeanstalkConductorPlay();
     return;
   }
 
@@ -373,6 +871,36 @@ function getTrackPlanetAchievements(): Set<TrackPlanetAchievementId> {
 
 function resetTrackPlanetAchievements(): void {
   setCookie(TRACK_PLANET_ACHIEVEMENT_COOKIE, '', 0);
+}
+
+function unlockBeanstalkAchievement(id: BeanstalkAchievementId): void {
+  const unlocked = getBeanstalkAchievements();
+  if (unlocked.has(id)) {
+    return;
+  }
+  unlocked.add(id);
+  setCookie(BEANSTALK_ACHIEVEMENT_COOKIE, JSON.stringify([...unlocked]), 60 * 60 * 24 * 365);
+}
+
+function getBeanstalkAchievements(): Set<BeanstalkAchievementId> {
+  const raw = getCookie(BEANSTALK_ACHIEVEMENT_COOKIE);
+  if (!raw) {
+    return new Set();
+  }
+  try {
+    const ids = JSON.parse(raw);
+    if (!Array.isArray(ids)) {
+      return new Set();
+    }
+    const validIds = new Set(BEANSTALK_ACHIEVEMENTS.map(achievement => achievement.id));
+    return new Set(ids.filter((id): id is BeanstalkAchievementId => validIds.has(id)));
+  } catch {
+    return new Set();
+  }
+}
+
+function resetBeanstalkAchievements(): void {
+  setCookie(BEANSTALK_ACHIEVEMENT_COOKIE, '', 0);
 }
 
 function getCookie(name: string): string | null {

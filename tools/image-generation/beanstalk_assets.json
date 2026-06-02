@@ -1,0 +1,114 @@
+[
+  {
+    "id": "civic-prime",
+    "prompt": "src/games/beanstalk-conductor/prompts/civic-prime.md",
+    "output": "src/games/beanstalk-conductor/assets/generated/civic-prime.png",
+    "api_size": "1024x1024",
+    "output_size": "1024x1024"
+  },
+  {
+    "id": "surface-launcher",
+    "prompt": "src/games/beanstalk-conductor/prompts/surface-launcher.md",
+    "output": "src/games/beanstalk-conductor/assets/generated/surface-launcher.png",
+    "api_size": "1024x1024",
+    "output_size": "512x512"
+  },
+  {
+    "id": "fleet-central",
+    "prompt": "src/games/beanstalk-conductor/prompts/fleet-central.md",
+    "output": "src/games/beanstalk-conductor/assets/generated/fleet-central.png",
+    "api_size": "1024x1024",
+    "output_size": "512x512"
+  },
+  {
+    "id": "barbell-stage",
+    "prompt": "src/games/beanstalk-conductor/prompts/barbell-stage.md",
+    "output": "src/games/beanstalk-conductor/assets/generated/barbell-stage.png",
+    "api_size": "1536x1024",
+    "output_size": "1536x1024"
+  },
+  {
+    "id": "admiral-voss",
+    "prompt": "src/games/beanstalk-conductor/prompts/admiral-voss.md",
+    "output": "src/games/beanstalk-conductor/assets/generated/admiral-voss.png",
+    "api_size": "1024x1024",
+    "output_size": "1024x1024"
+  },
+  {
+    "id": "admiral-voss-approval",
+    "prompt": "src/games/beanstalk-conductor/prompts/admiral-voss-approval.md",
+    "output": "src/games/beanstalk-conductor/assets/generated/admiral-voss-approval.png",
+    "api_size": "1024x1024",
+    "output_size": "1024x1024"
+  },
+  {
+    "id": "admiral-voss-concern",
+    "prompt": "src/games/beanstalk-conductor/prompts/admiral-voss-concern.md",
+    "output": "src/games/beanstalk-conductor/assets/generated/admiral-voss-concern.png",
+    "api_size": "1024x1024",
+    "output_size": "1024x1024"
+  },
+  {
+    "id": "admiral-voss-alarmed",
+    "prompt": "src/games/beanstalk-conductor/prompts/admiral-voss-alarmed.md",
+    "output": "src/games/beanstalk-conductor/assets/generated/admiral-voss-alarmed.png",
+    "api_size": "1024x1024",
+    "output_size": "1024x1024"
+  },
+  {
+    "id": "admiral-voss-panic",
+    "prompt": "src/games/beanstalk-conductor/prompts/admiral-voss-panic.md",
+    "output": "src/games/beanstalk-conductor/assets/generated/admiral-voss-panic.png",
+    "api_size": "1024x1024",
+    "output_size": "1024x1024"
+  },
+  {
+    "id": "backstory-01-promise",
+    "prompt": "src/games/beanstalk-conductor/prompts/backstory-01-promise.md",
+    "output": "src/games/beanstalk-conductor/assets/generated/backstory-01-promise.png",
+    "api_size": "1536x1024",
+    "output_size": "1536x1024"
+  },
+  {
+    "id": "backstory-02-engineering-meeting",
+    "prompt": "src/games/beanstalk-conductor/prompts/backstory-02-engineering-meeting.md",
+    "output": "src/games/beanstalk-conductor/assets/generated/backstory-02-engineering-meeting.png",
+    "api_size": "1536x1024",
+    "output_size": "1536x1024"
+  },
+  {
+    "id": "backstory-03-compromise",
+    "prompt": "src/games/beanstalk-conductor/prompts/backstory-03-compromise.md",
+    "output": "src/games/beanstalk-conductor/assets/generated/backstory-03-compromise.png",
+    "api_size": "1536x1024",
+    "output_size": "1536x1024"
+  },
+  {
+    "id": "backstory-04-clean-beanstalk",
+    "prompt": "src/games/beanstalk-conductor/prompts/backstory-04-clean-beanstalk.md",
+    "output": "src/games/beanstalk-conductor/assets/generated/backstory-04-clean-beanstalk.png",
+    "api_size": "1536x1024",
+    "output_size": "1536x1024"
+  },
+  {
+    "id": "backstory-05-fleet-central",
+    "prompt": "src/games/beanstalk-conductor/prompts/backstory-05-fleet-central.md",
+    "output": "src/games/beanstalk-conductor/assets/generated/backstory-05-fleet-central.png",
+    "api_size": "1536x1024",
+    "output_size": "1536x1024"
+  },
+  {
+    "id": "backstory-06-admiral-voss",
+    "prompt": "src/games/beanstalk-conductor/prompts/backstory-06-admiral-voss.md",
+    "output": "src/games/beanstalk-conductor/assets/generated/backstory-06-admiral-voss.png",
+    "api_size": "1536x1024",
+    "output_size": "1536x1024"
+  },
+  {
+    "id": "backstory-07-console",
+    "prompt": "src/games/beanstalk-conductor/prompts/backstory-07-console.md",
+    "output": "src/games/beanstalk-conductor/assets/generated/backstory-07-console.png",
+    "api_size": "1536x1024",
+    "output_size": "1536x1024"
+  }
+]

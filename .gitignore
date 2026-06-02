@@ -2,11 +2,16 @@ node_modules/
 dist/
 .env
 .env.*
+openai_key.txt
+.venv/
+venv/
 
 .vite/
 .cache/
 .DS_Store
 Thumbs.db
+__pycache__/
+*.pyc
 
 .idea/
 .vscode/

@@ -30,9 +30,11 @@ The central input is timing. The player chooses when to start the next progressi
 While a transfer is happening, the player does nothing. The screen can be effectively frozen from an input perspective
 while the simulation plays the transfer out in real time.
 
-The player should not choose a launch angle or target manually. The game computes a transfer that aims at the lower
-endpoint of the next stage tether at the opposite side of the orbit, equivalent to the 180-degree Hohmann-transfer
-picture in the ideal case. The player chooses when to commit that computed transfer.
+The player should not choose a launch angle or target manually. The game computes a transfer that aims at the next
+stage tether endpoint. This should not be simplified to "release when the target is 180 degrees away"; the ideal release
+geometry is a computed orbital-timing problem. The tutorial can still describe the intuition as waiting for the target
+to be on the far side of the planet, but the backend should use prediction and solving rather than a hard-coded angular
+rule. The player chooses when to commit that computed transfer.
 
 Reference checkpoints:
 
@@ -54,10 +56,10 @@ simulation causes the machinery to wobble under the consequences of its own mass
 - early transfers make money and appear elegant
 - later transfers disturb the barbell masses, moments of inertia, angular velocities, and velocity vectors
 - the system should visibly fight itself through wobble, load transfer, and timing mismatch
-- the comedy comes from the physics doing the damage honestly
+- the comedy comes from the physics producing the costs and wobble honestly
 
 This should be framed as a space-tycoon problem. `Admiral Voss` watches from the corner of the UI and reacts
-emotionally to performance, damage, and failed deliveries.
+emotionally to performance, costs, wobble, and failed deliveries.
 
 The underlying real-world control problem is intentionally not solved here. The game should expose the absurdity instead
 of hiding it.
@@ -74,6 +76,59 @@ of hiding it.
 - use a static overall view rather than zooming between stages
 - keep this larger and less mobile-oriented than Track Planet
 - avoid extra surrounding page chrome; put more content inside the game rectangle itself
+
+## Current implementation status
+
+Done in the early prototype:
+
+- static Beanstalk Conductor page and site wiring
+- about page with the Hop David / operational-mess motivation
+- early playable game canvas
+- three barbell stages around `Civic Prime`
+- selectable upmass/downmass source loading
+- adjacent-stage transfer actions
+- scalar transfer solver for ordinary barbell-to-barbell transfers
+- solver blackout handling for release windows with no practical root
+- custom central `1/r^2` gravity model
+- rigid-body barbell endpoint derivation from center of mass, angle, angular velocity, and fill state
+- release recoil that conserves linear and angular momentum
+- capture at an offset grab position that conserves linear and angular momentum
+- total system angular momentum helper and regression tests
+- demo achievement wiring for launching a mass
+- fixed circular-orbit `Fleet Central` marker in the playable view
+- final upmass transfer targeting `Fleet Central`
+- immediate downmass release/loading from `Fleet Central`
+- perigee-based final downmass disposal solver
+- game-over detection when a tether intersects `Civic Prime` or `Fleet Central`
+- achievements for catastrophic tether collisions
+- front screen plan for `Back story`, `Tutorial`, and `Play`
+- backstory script and image prompts
+- Admiral Voss reaction image prompts
+- basic front screen implementation with `Back story`, `Tutorial`, and `Play`
+- text-first backstory viewer with generated-image placeholders and completion achievement wiring
+- tutorial TODO placeholder with completion achievement wiring
+- source/mass-centered selection highlighting instead of whole-barbell highlighting
+- click-to-launch support for visible sources and occupied endpoints
+- visual source feed animations from `Civic Prime` and `Fleet Central`
+- faster simulation pacing for normal operation and active payload transfers
+- larger playfield framing so `Fleet Central` and unstable orbits have more visible room
+- source feeds now load the first available endpoint and keep `Civic Prime` from feeding through the planet
+- arrow-key menu navigation and single-panel backstory advancement with Enter/Space
+- play HUD moved into the canvas area with vBucks/selection on the left and Admiral Voss on the right
+
+Not done yet:
+
+- full vBucks accounting beyond prototype release cost, correction cost, and delivery revenue
+- full dialog matrix for profit, blackout, bankruptcy, crashes, and degraded operations
+- polished front screen styling and final generated menu/backstory art integration
+- generated backstory art and final backstory viewer styling
+- real tutorial/exhibition mode
+- stronger first/last transfer handling and clearer source-feed visuals as playtesting exposes edge cases
+- RK4 or other higher-order integration
+
+The next objective is playability polish around the live prototype: improve source/feed clarity, encode Admiral Voss
+dialog and money feedback for user actions, add generated art where prompts already exist, and defer the real tutorial
+until the core operation loop is less confusing.
 
 ## Naming and customer
 
@@ -176,10 +231,12 @@ The objective is to make money by delivering mass out of the gravity well.
 
 Money rules:
 
-- each successful upmass delivery from the surface to a destination radius earns money
+- money is earned when upmass is delivered to `Fleet Central`
 - a failed delivery costs a penalty
-- relative velocity at catch time costs money as equipment damage
-- downmass costs money
+- downmass costs money immediately when it is released/generated from `Fleet Central`
+- bad downmass timing can add release-correction cost because the transfer window is not free
+- ordinary intermediate upmass catches may have operational cost, but final `Fleet Central` delivery should not add
+  unintended-position or unintended-velocity penalties once it is targetable
 - downmass and upmass must physically match, but downmass should cost less than upmass earns
 - a working starting ratio is that downmass costs about one quarter as much as equivalent upmass earns
 
@@ -187,12 +244,23 @@ This creates the tycoon loop:
 
 - move mass upward
 - collect delivery revenue
-- absorb downmass cost and equipment damage
+- absorb downmass costs and transfer penalties
 - keep the ladder functioning long enough to remain profitable
 
-Everything should ultimately map to money rather than hard failure. A bad transfer can still attach, cause damage, and
-make the simulation wobble badly. The player loses money and watches the system degrade rather than getting a clean
-"game over" immediately.
+Most transfer problems should map to money rather than hard failure. A bad transfer can still attach, cost money, and
+make the simulation wobble badly. The player loses money and watches the system degrade.
+
+Hard game-over cases still exist:
+
+- a tether intersects `Civic Prime`
+- a tether intersects `Fleet Central`
+
+Each catastrophic collision should also have an achievement because it is funny and diagnostic.
+
+Transfer correction cost should use a simple first scale:
+
+- `1 vBuck = 1 ton * 1 m/s`
+- a 12-ton payload needing 3 m/s of correction costs 36 vBucks
 
 Money and stats should be displayed constantly in the top-left of the game rectangle.
 
@@ -208,8 +276,11 @@ Each transfer has a specific precomputed target:
 - the visual simulation then plays out the same model
 - the transfer resolves once the payload enters a capture radius around that endpoint
 
-The catch should allow tolerance. If the payload enters the capture radius, it attaches. Any relative velocity at the
-moment of catch is reported as equipment damage and converted into a money cost.
+The catch should allow tolerance, but a plain circular capture radius may catch too early when the payload passes near
+the wrong part of the endpoint path. Prefer an altitude/radial-range capture gate around the destination endpoint's
+orbital radius, plus a tangential/along-track tolerance, so the catch happens at the intended point in time. If the
+destination geometry is too close to the current tether or inside an unsafe "back out" zone, do not allow launch. Any
+relative velocity at the moment of catch is converted into a money cost.
 
 The first prototype should show the happy path only. It does not need timing-window UI, failure bands, or full
 probability-style preview. The player sees the computed transfer that the game intends to execute, then chooses the
@@ -219,17 +290,24 @@ timing.
 
 There can be multiple upmasses and downmasses in the system, but for visual and gameplay simplicity:
 
-- no more than one object can occupy a given stage for each mass direction
-- an upmass and a downmass may occupy the same position at the same time
-- an upmass cannot occupy the same position as another upmass
-- masses of the same direction cannot pass through each other
+- each barbell endpoint can hold at most one upmass and at most one downmass
+- the same endpoint may hold one upmass and one downmass at the same time
+- an endpoint may not hold two upmasses or two downmasses
+- this implicitly prevents same-direction masses from passing through each other
 - while a transfer is active, no new player action is accepted
 
 The player should always be choosing between currently available upmass/downmass timing opportunities rather than
 managing many simultaneous moving pieces.
 
+## Integration fidelity
+
+The first implementation uses the current lightweight integrator so the model can be built and tested quickly. Future
+physics work should upgrade the backend to RK4, preferably behind the same pure model APIs, once the destination and
+economy rules are stable.
+
 There is an infinite upmass source at the stationary surface launch site. This can inject unlimited new upmasses into
-the system, whether or not that is a good idea.
+the system, whether or not that is a good idea. For early play testing, fresh dynamic masses should be 12-ton units so
+system degradation is easier to see.
 
 There is a station above the top tether, `Fleet Central`, which provides infinite downmass.
 The balancing problem is the point: upmass and downmass physically need to match over time, but they create funny wobble
@@ -240,20 +318,80 @@ and financial tradeoffs.
 The first playable version must include multiple barbell stages. A single-stage prototype is not enough to express the
 ladder concept.
 
+Minimum playable slice:
+
+- render `Civic Prime`, three barbell stages, endpoint fills, and one active payload transfer in a static canvas view
+- show money, current selected mass, transfer cost, simulation time, and a short `Admiral Voss` reaction
+- allow Up/Down to cycle available timing opportunities
+- allow Enter to launch the selected adjacent-stage transfer at the current time
+- freeze new player actions while a transfer is in flight
+- solve the release correction with the backend transfer solver
+- animate the same simulated transfer that was solved
+- resolve the transfer by moving fill from the source endpoint to the target endpoint
+- apply correction cost in `Delta-vBucks`
+- keep the first capture/resolution model simple, then replace it with radial capture gates once the visual loop is playable
+
+Current prototype status:
+
+- the player can cycle transfer opportunities and launch masses
+- the rendering is still a diagnostic view, not final art
+- the planet should eventually be replaced or upgraded with a real asset or more deliberate planet art
+- the surface space cannon should be visible because it explains the infinite upmass source
+- the UI needs continued debugging around timing, transfer readability, and catch/resolution reporting
+- achievements wiring should start with a demo achievement for launching any mass
+
 The early flow should be:
 
 - calibration/tutorial shows the clean theoretical toss from one stage to the next
 - the first real simulated transfer works well
-- subsequent transfers naturally accumulate wobble and damage
+- subsequent transfers naturally accumulate wobble and transfer penalties
 - the admiral's reaction makes the degradation legible and funny
 
-The first screen should offer:
+## Game Page Front Screen
 
-- start immediately
-- tutorial
+The Beanstalk Conductor game page should open to a simple three-choice menu:
 
-The tutorial should be developed first. It should include text backstory and later images. It can use the pre-positioned
-ideal setup and should explain the steady-state operation before the messy version starts.
+- `Back story`
+- `Tutorial`
+- `Play`
+
+`Play` jumps directly into the current live game. The user should not be forced to watch the backstory or tutorial first.
+
+`Back story` is primarily images and text. The first version can be a sequence of illustrated panels with short copy.
+Fancy RPG-style scrolling text is optional. At the end, it may show a short non-interactive demo of masses moving up and
+down the ladder, but that is undecided and should not block the first backstory implementation.
+
+`Tutorial` is expected to be more challenging than the backstory. It should eventually teach the timing loop and may use
+an idealized/exhibition simulation where perturbations are suppressed or simplified.
+
+Completion tracking:
+
+- completing the backstory unlocks a Beanstalk achievement
+- completing the tutorial unlocks a Beanstalk achievement
+- the same browser cookie achievement system should drive check marks next to `Back story` and `Tutorial` on the game
+  front screen
+- `Play` should remain available regardless of completion state
+
+## Backstory Sequence
+
+First-pass backstory beats:
+
+1. The `Deputy Undersecretary for Orbital Uplift` announces the `Strategic Space Elevator Initiative`.
+2. Engineers explain that a real space elevator is not practical on the promised schedule.
+3. The `Office of Extraterrestrial Conveyance` rebrands the watered-down plan as the `Emergency Vertical Access
+   Compromise`.
+4. `Public Beanstalk Works` presents the clean cartoon-technical beanstalk: `Civic Prime`, a surface launcher, multiple
+   barbell stages, and `Fleet Central`.
+5. `Starward Logistics Command` needs fleet mass delivered upward, and `Fleet Central` provides downmass for balancing.
+6. `Admiral Voss` warns that space congress is angry, the money is borrowed, and the compromise had better work.
+7. Optional closing demo: upmass and downmass move through the clean theoretical ladder before real play begins.
+
+Backstory tone:
+
+- explanatory and cartoon-technical, like an illustrated blog diagram
+- bureaucratic and a little absurd
+- clean and competent infrastructure
+- the system should look good in the backstory; the player creates the operational mess later
 
 ## Dialog and image prompts
 
@@ -262,7 +400,7 @@ This game should use more text than Track Planet. The admiral/customer character
 Dialog/image direction:
 
 - the admiral appears in the top-right
-- dialog reacts to each catch, loss, damage event, or strong performance
+- dialog reacts to each catch, loss, penalty event, or strong performance
 - reactions are based on both current action and total money
 - if total money is high, a loss can still get a composed, encouraging reaction
 - if total money is low, poor performance should generate exaggerated panic or near-ruin reactions
@@ -272,12 +410,12 @@ For each dialog beat, create an accompanying image prompt in a prompts folder. T
 image generation. Later, when the game is closer to finished, the prompts can be used with available image-generation
 credits.
 
-Before the steady-state operation is demoed, aim for about 3-4 dialog/image beats:
+Before the steady-state operation is presented as polished, aim for about 3-4 dialog/image beats:
 
-- tutorial/backstory opening
 - first clean successful catch
-- visible damage or wobble after a mediocre catch
+- visible wobble or high-cost result after a mediocre catch
 - near-ruin reaction after poor performance while low on money
+- catastrophic collision reaction
 
 ## Early questions to solve
 
@@ -286,13 +424,13 @@ Before the steady-state operation is demoed, aim for about 3-4 dialog/image beat
 - whether every stage is visually identical or whether stage size changes with radius
 - what exact timing UI the player uses
 - how much trajectory preview the player gets before committing
-- how catch damage maps from relative velocity to money loss
+- how catch penalties map from relative velocity to money loss
 - how failed delivery penalties are computed
-- how the admiral's emotional state maps to profit, damage, and chaos
+- how the admiral's emotional state maps to profit, cost, and chaos
 - what the first 3-4 admiral dialog beats should say
 - where to put the prompt files once implementation begins
 
 ## Relation to other games
 
 Beanstalk Conductor is a separate game idea from Track Planet and should keep its own notes, assets, and planning space
-under `planning/jacobs-ladder/` unless the folder is renamed later.
+under `planning/beanstalk-conductor/`.

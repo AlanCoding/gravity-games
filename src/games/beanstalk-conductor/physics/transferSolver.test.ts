@@ -3,17 +3,19 @@ import {
   type BarbellState,
   type BeanstalkSystemState,
   add,
+  fromAngle,
   getEndpointState,
   length,
+  rotate90,
   scale,
   sub,
   vec,
 } from './model';
 import {
   applyCorrectionMomentumToEndpoint,
-  simulateTransfer,
+  computePerigeeRadius,
+  solvePlanetDisposalCorrection,
   solveTransferCorrection,
-  vBuckCostFromCorrection,
   type TransferTarget,
 } from './transferSolver';
 
@@ -67,36 +69,63 @@ function makeTarget(durationSeconds = 10): TransferTarget {
   };
 }
 
+function makeStraightAngularFixture(targetCenter = vec(10, 10)): BeanstalkSystemState {
+  return {
+    timeSeconds: 0,
+    planetRadius: 1,
+    gravitationalParameter: 0,
+    barbells: [
+      makeBarbell({
+        id: 'source',
+        center: vec(10, 0),
+        velocity: vec(0, 1),
+        length: 0,
+        outer: { upmassTons: 12, downmassTons: 0 },
+      }),
+      makeBarbell({
+        id: 'target',
+        center: targetCenter,
+        velocity: vec(0, 0),
+        length: 0,
+        inner: { upmassTons: 0, downmassTons: 12 },
+      }),
+    ],
+    payloads: [],
+  };
+}
+
 describe('transfer solver', () => {
-  it('uses zero relative release velocity as the nominal transfer', () => {
-    const state = makeLinearFixture();
+  it('uses a scalar correction along the source endpoint tangent', () => {
+    const state = makeStraightAngularFixture();
+    const target = makeTarget();
     const source = state.barbells.find(barbell => barbell.id === 'source');
     expect(source).toBeDefined();
     const endpoint = getEndpointState(source!, 'outer');
-    const solved = solveTransferCorrection(state, makeTarget());
+    const radialVelocity = scale(endpoint.position, (endpoint.velocity.x * endpoint.position.x + endpoint.velocity.y * endpoint.position.y) / (length(endpoint.position) ** 2));
+    const tangentVelocity = sub(endpoint.velocity, radialVelocity);
+    const solved = solveTransferCorrection(state, target);
 
     expect(solved.converged).toBe(true);
-    expect(solved.correctionMagnitude).toBeLessThan(0.0001);
-    expect(endpoint.velocity).toEqual(vec(10, 0));
+    expect(solved.missDistance).toBeLessThanOrEqual(0.001);
+    expect(Math.abs(solved.scalarCorrection)).toBeCloseTo(solved.correctionMagnitude, 8);
+    expect(Math.abs(solved.deltaVelocity.x * tangentVelocity.y - solved.deltaVelocity.y * tangentVelocity.x)).toBeLessThan(0.0001);
   });
 
-  it('solves a badly timed transfer by adding correction velocity at a vBucks cost', () => {
-    const goodState = makeLinearFixture();
-    const badState = makeLinearFixture(vec(102, 60));
-    const target = makeTarget();
-    const good = solveTransferCorrection(goodState, target);
-    const bad = solveTransferCorrection(badState, target);
-    const resolvedBad = simulateTransfer(badState, target, bad.deltaVelocity);
-    const payload = resolvedBad.payloads.find(candidate => candidate.id === 'solver-payload');
-    const targetBarbell = resolvedBad.barbells.find(barbell => barbell.id === 'target');
+  it('reports blackout when no scalar root is bracketed inside the search limit', () => {
+    const state = makeStraightAngularFixture(vec(20, 20));
+    const target: TransferTarget = {
+      sourceBarbellId: 'source',
+      sourceEndpoint: 'outer',
+      targetBarbellId: 'target',
+      targetEndpoint: 'inner',
+      kind: 'upmass',
+      massTons: 12,
+      durationSeconds: 10,
+    };
+    const solved = solveTransferCorrection(state, target);
 
-    expect(good.converged).toBe(true);
-    expect(bad.converged).toBe(true);
-    expect(bad.correctionMagnitude).toBeGreaterThan(good.correctionMagnitude + 5);
-    expect(vBuckCostFromCorrection(bad.deltaVelocity, target.massTons)).toBeGreaterThan(800);
-    expect(payload).toBeDefined();
-    expect(targetBarbell).toBeDefined();
-    expect(length(sub(payload!.position, getEndpointState(targetBarbell!, 'inner').position))).toBeLessThan(0.1);
+    expect(solved.converged).toBe(false);
+    expect(solved.failureReason).toBe('no-scalar-root');
   });
 
   it('applies equal and opposite correction momentum to the source endpoint', () => {
@@ -131,5 +160,54 @@ describe('transfer solver', () => {
     const barbellMomentumChange = scale(sub(sourceAfter.velocity, sourceBefore.velocity), 172);
 
     expect(length(add(barbellMomentumChange, scale(deltaVelocity, 12)))).toBeLessThan(0.0001);
+  });
+
+  it('computes perigee from orbital state', () => {
+    const radius = 100;
+    const mu = 12000;
+    const position = vec(radius, 0);
+    const circularVelocity = vec(0, Math.sqrt(mu / radius));
+
+    expect(computePerigeeRadius(position, circularVelocity, mu)).toBeCloseTo(radius, 8);
+  });
+
+  it('solves downmass disposal by pushing perigee to the planet surface', () => {
+    const radius = 100;
+    const mu = 12000;
+    const radial = fromAngle(0);
+    const tangent = rotate90(radial);
+    const state: BeanstalkSystemState = {
+      timeSeconds: 0,
+      planetRadius: 48,
+      gravitationalParameter: mu,
+      barbells: [
+        makeBarbell({
+          id: 'source',
+          center: scale(radial, radius),
+          velocity: scale(tangent, Math.sqrt(mu / radius)),
+          angleRad: 0,
+          length: 0,
+          inner: { upmassTons: 0, downmassTons: 12 },
+        }),
+      ],
+      payloads: [],
+    };
+    const target: TransferTarget = {
+      sourceBarbellId: 'source',
+      sourceEndpoint: 'inner',
+      targetBarbellId: 'civic-prime-disposal',
+      targetEndpoint: 'outer',
+      destinationKind: 'planet-disposal',
+      kind: 'downmass',
+      massTons: 12,
+      durationSeconds: 10,
+    };
+
+    const solved = solvePlanetDisposalCorrection(state, target, { tolerance: 0.00001 });
+    const sourceEndpoint = getEndpointState(state.barbells[0], 'inner');
+    const perigee = computePerigeeRadius(sourceEndpoint.position, add(sourceEndpoint.velocity, solved.deltaVelocity), mu);
+
+    expect(solved.converged).toBe(true);
+    expect(perigee).toBeCloseTo(state.planetRadius, 4);
   });
 });

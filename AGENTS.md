@@ -35,7 +35,7 @@ This repository is a Vite + TypeScript + Three.js browser game repo for npm-buil
 - Keep planning and design markdown under `planning/`, organized by topic or game.
 - Preserve the custom physics boundary. Do not add Rapier or another built-in gravity engine unless explicitly requested.
 - Achievement integrations should stay behind placeholder callbacks or small adapter modules until the target achievements system is clear.
-- After each completed response that changes the repo, create a git commit with a concise message that describes the change.
+- Do not automatically commit every completed response. Only create commits when the user explicitly asks for a commit or history rewrite.
 - If a requested change reveals a logical refactor opportunity, prompt the user with the refactor idea and ask for a yes/no go-ahead before doing it.
 
 ## Validation

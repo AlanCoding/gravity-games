@@ -112,6 +112,16 @@ export function cloneSystem(state: BeanstalkSystemState): BeanstalkSystemState {
   };
 }
 
+export function cloneBarbell(barbell: BarbellState): BarbellState {
+  return {
+    ...barbell,
+    center: { ...barbell.center },
+    velocity: { ...barbell.velocity },
+    inner: { ...barbell.inner },
+    outer: { ...barbell.outer },
+  };
+}
+
 export function getFillMass(fill: MassFill): number {
   return fill.upmassTons + fill.downmassTons;
 }
@@ -154,6 +164,42 @@ export function getBarbellMomentOfInertia(barbell: BarbellState): number {
   return (
     getEndpointMass(barbell, 'inner') * lengthSq(innerOffset)
     + getEndpointMass(barbell, 'outer') * lengthSq(outerOffset)
+  );
+}
+
+export function getBarbellPointVelocity(barbell: BarbellState, point: Vec2): Vec2 {
+  const offset = sub(point, barbell.center);
+  return add(barbell.velocity, scale(rotate90(offset), barbell.angularVelocityRadPerSecond));
+}
+
+export function getBarbellLinearMomentum(barbell: BarbellState): Vec2 {
+  return scale(barbell.velocity, getTotalBarbellMass(barbell));
+}
+
+export function getPayloadLinearMomentum(payload: PayloadState): Vec2 {
+  return scale(payload.velocity, payload.massTons);
+}
+
+export function getBarbellAngularMomentumAbout(barbell: BarbellState, origin: Vec2): number {
+  const inner = getEndpointState(barbell, 'inner');
+  const outer = getEndpointState(barbell, 'outer');
+  return (
+    cross(sub(inner.position, origin), scale(inner.velocity, inner.massTons))
+    + cross(sub(outer.position, origin), scale(outer.velocity, outer.massTons))
+  );
+}
+
+export function getPayloadAngularMomentumAbout(payload: PayloadState, origin: Vec2): number {
+  return cross(sub(payload.position, origin), getPayloadLinearMomentum(payload));
+}
+
+export function getSystemAngularMomentumAbout(
+  state: BeanstalkSystemState,
+  origin: Vec2 = vec(0, 0),
+): number {
+  return (
+    state.barbells.reduce((total, barbell) => total + getBarbellAngularMomentumAbout(barbell, origin), 0)
+    + state.payloads.reduce((total, payload) => total + getPayloadAngularMomentumAbout(payload, origin), 0)
   );
 }
 
@@ -231,6 +277,9 @@ export function moveFillAcrossBarbell(options: {
   const key = kind === 'upmass' ? 'upmassTons' : 'downmassTons';
   next[from][key] -= moved;
   next[to][key] += moved;
+  const angularMomentum = getBarbellAngularMomentumAbout(barbell, barbell.center);
+  const momentOfInertia = getBarbellMomentOfInertia(next);
+  next.angularVelocityRadPerSecond = momentOfInertia > 0 ? angularMomentum / momentOfInertia : 0;
   return next;
 }
 
@@ -248,4 +297,83 @@ export function createPayloadFromEndpoint(options: {
     position: { ...options.endpoint.position },
     velocity: add(options.endpoint.velocity, options.deltaVelocity ?? vec(0, 0)),
   };
+}
+
+export function detachEndpointMassAsPayload(options: {
+  barbell: BarbellState;
+  endpoint: EndpointKey;
+  kind: 'upmass' | 'downmass';
+  massTons: number;
+  payloadId: string;
+  deltaVelocity?: Vec2;
+}): {
+  barbell: BarbellState;
+  payload: PayloadState;
+} {
+  const endpoint = getEndpointState(options.barbell, options.endpoint);
+  const payload = createPayloadFromEndpoint({
+    id: options.payloadId,
+    kind: options.kind,
+    massTons: options.massTons,
+    endpoint,
+    deltaVelocity: options.deltaVelocity,
+  });
+  const oldMass = getTotalBarbellMass(options.barbell);
+  const newMass = oldMass - options.massTons;
+  if (newMass <= 0) {
+    throw new Error('Cannot detach more mass than the barbell contains.');
+  }
+
+  const next = cloneBarbell(options.barbell);
+  const key = options.kind === 'upmass' ? 'upmassTons' : 'downmassTons';
+  next[options.endpoint][key] -= options.massTons;
+  if (next[options.endpoint][key] < -0.000001) {
+    throw new Error('Cannot detach unavailable endpoint fill mass.');
+  }
+  next[options.endpoint][key] = Math.max(0, next[options.endpoint][key]);
+
+  const conservedCenter = { ...options.barbell.center };
+  next.center = scale(sub(scale(options.barbell.center, oldMass), scale(payload.position, options.massTons)), 1 / newMass);
+  next.velocity = scale(sub(getBarbellLinearMomentum(options.barbell), getPayloadLinearMomentum(payload)), 1 / newMass);
+
+  const finalInertia = getBarbellMomentOfInertia(next);
+  const oldAngularMomentum = getBarbellAngularMomentumAbout(options.barbell, conservedCenter);
+  const payloadAngularMomentum = getPayloadAngularMomentumAbout(payload, conservedCenter);
+  const translationalAngularMomentum = cross(sub(next.center, conservedCenter), scale(next.velocity, newMass));
+  next.angularVelocityRadPerSecond = finalInertia > 0
+    ? (oldAngularMomentum - payloadAngularMomentum - translationalAngularMomentum) / finalInertia
+    : 0;
+
+  return { barbell: next, payload };
+}
+
+export function attachPayloadToEndpoint(options: {
+  barbell: BarbellState;
+  endpoint: EndpointKey;
+  payload: PayloadState;
+}): BarbellState {
+  const oldMass = getTotalBarbellMass(options.barbell);
+  const newMass = oldMass + options.payload.massTons;
+  const finalCenter = scale(
+    add(scale(options.barbell.center, oldMass), scale(options.payload.position, options.payload.massTons)),
+    1 / newMass,
+  );
+  const finalVelocity = scale(
+    add(getBarbellLinearMomentum(options.barbell), getPayloadLinearMomentum(options.payload)),
+    1 / newMass,
+  );
+  const final = cloneBarbell(options.barbell);
+  const key = options.payload.kind === 'upmass' ? 'upmassTons' : 'downmassTons';
+  final[options.endpoint][key] += options.payload.massTons;
+  final.center = finalCenter;
+  final.velocity = finalVelocity;
+
+  const oldAngularMomentum = getBarbellAngularMomentumAbout(options.barbell, finalCenter);
+  const payloadAngularMomentum = getPayloadAngularMomentumAbout(options.payload, finalCenter);
+  const finalInertia = getBarbellMomentOfInertia(final);
+  final.angularVelocityRadPerSecond = finalInertia > 0
+    ? (oldAngularMomentum + payloadAngularMomentum) / finalInertia
+    : 0;
+
+  return final;
 }

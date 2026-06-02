@@ -2,6 +2,7 @@ import {
   type BarbellState,
   type BeanstalkSystemState,
   type EndpointKey,
+  type Vec2,
   add,
   fromAngle,
   rotate90,
@@ -10,6 +11,10 @@ import {
 
 export const CIVIC_PRIME_RADIUS = 48;
 export const CIVIC_PRIME_MU = 12000;
+export const BARBELL_ENDPOINT_DRY_MASS_TONS = 80;
+export const DYNAMIC_MASS_TONS = 12;
+export const FLEET_CENTRAL_ORBIT_RADIUS = 275;
+export const FLEET_CENTRAL_PHASE_RAD = Math.PI / 3;
 
 export type StageSpec = {
   id: string;
@@ -43,7 +48,7 @@ export function createCircularTidallyLockedBarbell(options: {
     angleRad: options.phaseRad,
     angularVelocityRadPerSecond: orbitalAngularVelocity,
     length: options.length,
-    dryMassTons: options.dryMassTons ?? 80,
+    dryMassTons: options.dryMassTons ?? BARBELL_ENDPOINT_DRY_MASS_TONS,
     inner: {
       upmassTons: options.innerUpmassTons ?? 0,
       downmassTons: options.innerDownmassTons ?? 0,
@@ -58,20 +63,41 @@ export function createCircularTidallyLockedBarbell(options: {
 export function createInitialBeanstalkSystem(): BeanstalkSystemState {
   const stages: StageSpec[] = [
     { id: 'stage-1', centerRadius: 88, length: 20, phaseRad: 0 },
-    { id: 'stage-2', centerRadius: 138, length: 26, phaseRad: Math.PI },
-    { id: 'stage-3', centerRadius: 208, length: 34, phaseRad: 0 },
+    { id: 'stage-2', centerRadius: 165, length: 28, phaseRad: Math.PI / 2 },
+    { id: 'stage-3', centerRadius: 225, length: 36, phaseRad: 0 },
   ];
 
   return {
     timeSeconds: 0,
     planetRadius: CIVIC_PRIME_RADIUS,
     gravitationalParameter: CIVIC_PRIME_MU,
-    barbells: stages.map((stage, index) => createCircularTidallyLockedBarbell({
-      ...stage,
-      outerUpmassTons: index === 0 ? 12 : 0,
-      innerDownmassTons: index === stages.length - 1 ? 12 : 0,
-    })),
+    barbells: stages.map(stage => createCircularTidallyLockedBarbell(stage)),
     payloads: [],
+  };
+}
+
+export function getFleetCentralState(options: {
+  timeSeconds: number;
+  gravitationalParameter?: number;
+  orbitRadius?: number;
+  phaseRad?: number;
+}): {
+  id: string;
+  position: Vec2;
+  velocity: Vec2;
+  orbitRadius: number;
+} {
+  const mu = options.gravitationalParameter ?? CIVIC_PRIME_MU;
+  const orbitRadius = options.orbitRadius ?? FLEET_CENTRAL_ORBIT_RADIUS;
+  const angularVelocity = Math.sqrt(mu / (orbitRadius * orbitRadius * orbitRadius));
+  const phase = (options.phaseRad ?? FLEET_CENTRAL_PHASE_RAD) + angularVelocity * options.timeSeconds;
+  const radial = fromAngle(phase);
+  const tangent = rotate90(radial);
+  return {
+    id: 'fleet-central',
+    position: scale(radial, orbitRadius),
+    velocity: scale(tangent, angularVelocity * orbitRadius),
+    orbitRadius,
   };
 }
 
@@ -94,7 +120,6 @@ export function createSurfaceLauncherState(options?: {
     id: 'civic-prime-space-gun',
     position: scale(radial, CIVIC_PRIME_RADIUS),
     velocity: add(scale(radial, 0), { x: 0, y: 0 }),
-    upmassTons: options?.upmassTons ?? 12,
+    upmassTons: options?.upmassTons ?? DYNAMIC_MASS_TONS,
   };
 }
-
