@@ -30,6 +30,10 @@ let achievementTimeout: number | null = null;
 let pageKeyController: AbortController | null = null;
 const TRACK_PLANET_ACHIEVEMENT_COOKIE = 'gravity_games_track_planet_achievements';
 const BEANSTALK_ACHIEVEMENT_COOKIE = 'gravity_games_beanstalk_conductor_achievements';
+const BEANSTALK_GENERATED_IMAGE_URLS = import.meta.glob<string>(
+  './games/beanstalk-conductor/assets/generated/*.png',
+  { eager: true, query: '?url', import: 'default' },
+);
 
 const BEANSTALK_BACKSTORY_PANELS = [
   {
@@ -232,29 +236,29 @@ function renderBeanstalkConductorMenu(): void {
   appElement.innerHTML = `
     <section class="beanstalk-page">
       <div class="achievement-toast" id="achievementToast" aria-live="polite" aria-atomic="true"></div>
-      <div class="beanstalk-menu-shell">
-        <div class="beanstalk-menu-art-wrap">
-          <canvas id="beanstalkMenuArt" class="beanstalk-menu-art" width="960" height="540" aria-hidden="true"></canvas>
+      <div class="beanstalk-shell">
+        <div class="beanstalk-game-stage beanstalk-screen-stage">
+          <canvas id="beanstalkMenuArt" class="beanstalk-menu-art" width="1280" height="720" aria-hidden="true"></canvas>
+          <aside class="beanstalk-overlay beanstalk-menu-center-panel beanstalk-screen-panel" aria-label="Beanstalk Conductor menu">
+            <a class="eyebrow game-home-link" href="/gravity-games/">Gravity Games</a>
+            <h1><a class="game-title-link" href="#beanstalk-conductor-about">Beanstalk Conductor</a></h1>
+            <p class="page-copy">Public infrastructure, private timing decisions, and one increasingly concerned admiral.</p>
+            <nav class="beanstalk-menu-actions" aria-label="Beanstalk Conductor choices">
+              <a class="index-link beanstalk-menu-choice" href="#beanstalk-conductor-backstory">
+                <strong>Back story ${backstoryDone ? '<span class="completion-mark">Done</span>' : ''}</strong>
+                <span>Read the public works briefing.</span>
+              </a>
+              <a class="index-link beanstalk-menu-choice" href="#beanstalk-conductor-tutorial">
+                <strong>Tutorial ${tutorialDone ? '<span class="completion-mark">Done</span>' : '<span class="game-status game-status-development">TODO</span>'}</strong>
+                <span>Operator training placeholder.</span>
+              </a>
+              <a class="index-link beanstalk-menu-choice" href="#beanstalk-conductor-play">
+                <strong>Play</strong>
+                <span>Jump straight into live operations.</span>
+              </a>
+            </nav>
+          </aside>
         </div>
-        <aside class="beanstalk-hud beanstalk-menu-panel" aria-label="Beanstalk Conductor menu">
-          <a class="eyebrow game-home-link" href="/gravity-games/">Gravity Games</a>
-          <h1><a class="game-title-link" href="#beanstalk-conductor-about">Beanstalk Conductor</a></h1>
-          <p class="page-copy">Public infrastructure, private timing decisions, and one increasingly concerned admiral.</p>
-          <nav class="beanstalk-menu-actions" aria-label="Beanstalk Conductor choices">
-            <a class="index-link beanstalk-menu-choice" href="#beanstalk-conductor-backstory">
-              <strong>Back story ${backstoryDone ? '<span class="completion-mark">Done</span>' : ''}</strong>
-              <span>Read the public works briefing.</span>
-            </a>
-            <a class="index-link beanstalk-menu-choice" href="#beanstalk-conductor-tutorial">
-              <strong>Tutorial ${tutorialDone ? '<span class="completion-mark">Done</span>' : '<span class="game-status game-status-development">TODO</span>'}</strong>
-              <span>Operator training placeholder.</span>
-            </a>
-            <a class="index-link beanstalk-menu-choice" href="#beanstalk-conductor-play">
-              <strong>Play</strong>
-              <span>Jump straight into live operations.</span>
-            </a>
-          </nav>
-        </aside>
       </div>
     </section>
   `;
@@ -265,14 +269,13 @@ function renderBeanstalkConductorMenu(): void {
 function renderBeanstalkBackstory(): void {
   stopCurrentGame();
   appElement.innerHTML = `
-    <section class="static-page beanstalk-story-page">
+    <section class="beanstalk-page">
       <div class="achievement-toast" id="achievementToast" aria-live="polite" aria-atomic="true"></div>
-      <header class="static-hero">
-        <p class="eyebrow">Beanstalk Conductor</p>
-        <h1>Back story</h1>
-        <p class="page-copy">The official explanation for the Emergency Vertical Access Compromise.</p>
-      </header>
-      <article class="story-section beanstalk-story-panel" id="beanstalkStoryPanel" tabindex="0" aria-live="polite"></article>
+      <div class="beanstalk-shell">
+        <div class="beanstalk-game-stage beanstalk-screen-stage">
+          <article class="beanstalk-story-panel" id="beanstalkStoryPanel" tabindex="0" aria-live="polite"></article>
+        </div>
+      </div>
     </section>
   `;
   bindBeanstalkBackstory();
@@ -281,23 +284,18 @@ function renderBeanstalkBackstory(): void {
 function renderBeanstalkTutorial(): void {
   stopCurrentGame();
   appElement.innerHTML = `
-    <section class="static-page">
+    <section class="beanstalk-page">
       <div class="achievement-toast" id="achievementToast" aria-live="polite" aria-atomic="true"></div>
-      <header class="static-hero">
-        <p class="eyebrow">Beanstalk Conductor</p>
-        <h1>Tutorial</h1>
-        <p class="page-copy">TODO: operator training will go here after the live loop and backstory are stable.</p>
-      </header>
-      <article class="story-section">
-        <h2>Training placeholder</h2>
-        <p>The final tutorial needs guided timing, clean theoretical transfers, and an explanation of why your choices later make the system wobble. For now this page proves the menu and achievement wiring.</p>
-      </article>
-      <nav class="index-links static-nav" aria-label="Tutorial navigation">
-        <button class="index-link story-complete-button" id="completeBeanstalkTutorial" type="button">
-          <strong>Return to menu</strong>
-          <span>Mark the placeholder tutorial complete.</span>
-        </button>
-      </nav>
+      <div class="beanstalk-shell">
+        <div class="beanstalk-game-stage beanstalk-screen-stage">
+          <article class="beanstalk-tutorial-panel">
+            <p class="eyebrow">Beanstalk Conductor</p>
+            <h1>Tutorial</h1>
+            <p>The final tutorial needs guided timing, clean theoretical transfers, and an explanation of why your choices later make the system wobble. For now this page proves the menu and achievement wiring.</p>
+            <button class="page-action-button story-advance-button" id="completeBeanstalkTutorial" type="button">Return to menu</button>
+          </article>
+        </div>
+      </div>
     </section>
   `;
   document.querySelector<HTMLButtonElement>('#completeBeanstalkTutorial')?.addEventListener('click', () => {
@@ -329,6 +327,7 @@ function renderBeanstalkConductorPlay(): void {
             </dl>
           </aside>
           <aside class="beanstalk-overlay beanstalk-overlay-right" aria-label="Admiral Voss">
+            <img class="beanstalk-admiral-portrait" id="beanstalkAdmiralPortrait" alt="" aria-hidden="true">
             <strong>Admiral Voss</strong>
             <p id="beanstalkAdmiral">Awaiting first transfer.</p>
           </aside>
@@ -363,6 +362,7 @@ function renderBeanstalkConductorPlay(): void {
     statsDisplay: document.querySelector<HTMLElement>('#beanstalkStats'),
     selectionDisplay: document.querySelector<HTMLElement>('#beanstalkSelection'),
     admiralDisplay: document.querySelector<HTMLElement>('#beanstalkAdmiral'),
+    admiralPortraitDisplay: document.querySelector<HTMLImageElement>('#beanstalkAdmiralPortrait'),
     achievementNotifier: flashAchievement,
     achievementUnlocker: unlockBeanstalkAchievement,
   });
@@ -611,39 +611,84 @@ function drawBeanstalkMenuArt(): void {
   if (!canvas || !ctx) {
     return;
   }
+  const civicPrimeUrl = getBeanstalkGeneratedImageUrl('civic-prime.png');
+  const imageUrls = {
+    civicPrime: civicPrimeUrl,
+    surfaceLauncher: getBeanstalkGeneratedImageUrl('surface-launcher.png'),
+    fleetCentral: getBeanstalkGeneratedImageUrl('fleet-central.png'),
+    barbellStage: getBeanstalkGeneratedImageUrl('barbell-stage.png'),
+  };
+  const images: Partial<Record<keyof typeof imageUrls, HTMLImageElement>> = {};
+  for (const [key, url] of Object.entries(imageUrls) as [keyof typeof imageUrls, string | null][]) {
+    if (!url) {
+      continue;
+    }
+    const image = new Image();
+    image.addEventListener('load', () => {
+      drawBeanstalkMenuArtScene(canvas, ctx, images);
+    }, { once: true });
+    image.src = url;
+    images[key] = image;
+  }
+  drawBeanstalkMenuArtScene(canvas, ctx, images);
+}
 
+function drawBeanstalkMenuArtScene(
+  canvas: HTMLCanvasElement,
+  ctx: CanvasRenderingContext2D,
+  images: Partial<Record<'civicPrime' | 'surfaceLauncher' | 'fleetCentral' | 'barbellStage', HTMLImageElement>>,
+): void {
   const width = canvas.width;
   const height = canvas.height;
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = '#050709';
   ctx.fillRect(0, 0, width, height);
 
-  const centerX = width * 0.25;
-  const centerY = height * 0.55;
-  const planetRadius = 90;
-  ctx.beginPath();
-  ctx.arc(centerX, centerY, planetRadius, 0, Math.PI * 2);
-  ctx.fillStyle = '#356faa';
-  ctx.fill();
-  ctx.fillStyle = '#4c9b68';
-  ctx.beginPath();
-  ctx.ellipse(centerX - 28, centerY + 8, 35, 18, -0.4, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.ellipse(centerX + 30, centerY - 22, 26, 13, 0.5, 0, Math.PI * 2);
-  ctx.fill();
+  const centerX = width * 0.2;
+  const centerY = height * 0.36;
+  const planetRadius = 112;
+  if (images.barbellStage && imageIsReady(images.barbellStage)) {
+    ctx.save();
+    ctx.globalAlpha = 0.2;
+    ctx.drawImage(images.barbellStage, width * 0.48, height * 0.12, width * 0.34, height * 0.28);
+    ctx.restore();
+  }
+
+  if (images.civicPrime && imageIsReady(images.civicPrime)) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, planetRadius, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.drawImage(
+      images.civicPrime,
+      centerX - planetRadius,
+      centerY - planetRadius,
+      planetRadius * 2,
+      planetRadius * 2,
+    );
+    ctx.restore();
+  } else {
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, planetRadius, 0, Math.PI * 2);
+    ctx.fillStyle = '#356faa';
+    ctx.fill();
+  }
 
   ctx.save();
   ctx.translate(centerX + planetRadius - 8, centerY - 18);
   ctx.rotate(-0.25);
-  ctx.fillStyle = '#eac460';
-  ctx.fillRect(-10, -8, 28, 16);
-  ctx.fillStyle = '#d7e1de';
-  ctx.fillRect(10, -4, 35, 8);
+  if (images.surfaceLauncher && imageIsReady(images.surfaceLauncher)) {
+    ctx.drawImage(images.surfaceLauncher, -28, -28, 56, 56);
+  } else {
+    ctx.fillStyle = '#eac460';
+    ctx.fillRect(-10, -8, 28, 16);
+    ctx.fillStyle = '#d7e1de';
+    ctx.fillRect(10, -4, 35, 8);
+  }
   ctx.restore();
 
   const stageXs = [420, 560, 710];
-  const stageYs = [330, 250, 170];
+  const stageYs = [300, 230, 160];
   for (let i = 0; i < stageXs.length; i += 1) {
     const x = stageXs[i];
     const y = stageYs[i];
@@ -671,16 +716,20 @@ function drawBeanstalkMenuArt(): void {
   ctx.fillStyle = '#0f172a';
   ctx.strokeStyle = '#93c5fd';
   ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.rect(780, 82, 92, 52);
-  ctx.fill();
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(742, 108);
-  ctx.lineTo(780, 108);
-  ctx.moveTo(872, 108);
-  ctx.lineTo(910, 108);
-  ctx.stroke();
+  if (images.fleetCentral && imageIsReady(images.fleetCentral)) {
+    ctx.drawImage(images.fleetCentral, 768, 54, 116, 116);
+  } else {
+    ctx.beginPath();
+    ctx.rect(780, 82, 92, 52);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(742, 108);
+    ctx.lineTo(780, 108);
+    ctx.moveTo(872, 108);
+    ctx.lineTo(910, 108);
+    ctx.stroke();
+  }
   ctx.fillStyle = '#dbeafe';
   ctx.font = '700 20px system-ui, sans-serif';
   ctx.textAlign = 'center';
@@ -695,6 +744,16 @@ function drawBeanstalkMenuArt(): void {
   ctx.bezierCurveTo(620, 225, 700, 175, 780, 108);
   ctx.stroke();
   ctx.setLineDash([]);
+}
+
+function getBeanstalkGeneratedImageUrl(filename: string): string | null {
+  const match = Object.entries(BEANSTALK_GENERATED_IMAGE_URLS)
+    .find(([path]) => path.endsWith(`/assets/generated/${filename}`));
+  return match ? match[1] : null;
+}
+
+function imageIsReady(image: HTMLImageElement): boolean {
+  return image.complete && image.naturalWidth > 0;
 }
 
 function completeBeanstalkBackstory(): void {
@@ -748,23 +807,63 @@ function bindBeanstalkBackstory(): void {
   pageKeyController?.abort();
   pageKeyController = new AbortController();
   let panelIndex = 0;
+  let visibleCharacterCount = 0;
+  let fullText = '';
+  let textDisplay: HTMLElement | null = null;
+  let typewriterTimer: number | null = null;
+
+  const stopTypewriter = (): void => {
+    if (typewriterTimer !== null) {
+      window.clearInterval(typewriterTimer);
+      typewriterTimer = null;
+    }
+  };
+
+  const updateText = (): void => {
+    if (textDisplay) {
+      textDisplay.textContent = fullText.slice(0, visibleCharacterCount);
+    }
+  };
+
+  const completeText = (): void => {
+    stopTypewriter();
+    visibleCharacterCount = fullText.length;
+    updateText();
+  };
+
+  const startTypewriter = (): void => {
+    stopTypewriter();
+    typewriterTimer = window.setInterval(() => {
+      visibleCharacterCount = Math.min(fullText.length, visibleCharacterCount + 1);
+      updateText();
+      if (visibleCharacterCount >= fullText.length) {
+        stopTypewriter();
+      }
+    }, 22);
+  };
+
   const renderPanel = (): void => {
     const item = BEANSTALK_BACKSTORY_PANELS[panelIndex];
-    const isLast = panelIndex === BEANSTALK_BACKSTORY_PANELS.length - 1;
+    const imageUrl = getBeanstalkGeneratedImageUrl(item.image);
+    fullText = `${item.title}\n\n${item.paragraphs.join('\n\n')}`;
+    visibleCharacterCount = 0;
     panel.innerHTML = `
-      <div class="story-image-placeholder" role="img" aria-label="${escapeHtml(item.title)} illustration placeholder">
-        <span>${escapeHtml(item.image)}</span>
-      </div>
-      <div class="beanstalk-story-copy">
-        <p class="eyebrow">Panel ${panelIndex + 1} / ${BEANSTALK_BACKSTORY_PANELS.length}</p>
-        <h2>${escapeHtml(item.title)}</h2>
-        ${item.paragraphs.map(paragraph => `<p>${escapeHtml(paragraph)}</p>`).join('')}
-        <button class="page-action-button story-advance-button" type="button">${isLast ? 'Return to menu' : 'Continue'}</button>
-      </div>
+      ${imageUrl
+        ? `<img class="beanstalk-story-image" src="${imageUrl}" alt="${escapeHtml(item.title)}">`
+        : `<div class="story-image-placeholder" role="img" aria-label="${escapeHtml(item.title)} illustration placeholder">
+            <span>${escapeHtml(item.image)}</span>
+          </div>`}
+      <pre class="beanstalk-story-copy" id="beanstalkStoryText" aria-label="Back story panel ${panelIndex + 1} text"></pre>
     `;
-    panel.querySelector<HTMLButtonElement>('.story-advance-button')?.addEventListener('click', advance);
+    textDisplay = panel.querySelector<HTMLElement>('#beanstalkStoryText');
+    updateText();
+    startTypewriter();
   };
   const advance = (): void => {
+    if (visibleCharacterCount < fullText.length) {
+      completeText();
+      return;
+    }
     if (panelIndex >= BEANSTALK_BACKSTORY_PANELS.length - 1) {
       completeBeanstalkBackstory();
       return;
@@ -781,6 +880,7 @@ function bindBeanstalkBackstory(): void {
     event.preventDefault();
     advance();
   }, { signal: pageKeyController.signal });
+  pageKeyController.signal.addEventListener('abort', stopTypewriter, { once: true });
 }
 
 function bindEnterOrSpace(selector: string, handler: () => void): void {

@@ -1,12 +1,16 @@
 import { createInitialBeanstalkSystem, createSurfaceLauncherState, getFleetCentralState } from './physics/initialState';
+import admiralVossAlarmedUrl from './assets/generated/admiral-voss-alarmed.png';
+import admiralVossApprovalUrl from './assets/generated/admiral-voss-approval.png';
+import admiralVossConcernUrl from './assets/generated/admiral-voss-concern.png';
+import admiralVossPanicUrl from './assets/generated/admiral-voss-panic.png';
+import admiralVossUrl from './assets/generated/admiral-voss.png';
+import civicPrimeUrl from './assets/generated/civic-prime.png';
+import fleetCentralUrl from './assets/generated/fleet-central.png';
 import {
   type BeanstalkSystemState,
   type PayloadState,
   type Vec2,
-  add,
   getEndpointState,
-  scale as scaleVector,
-  sub,
 } from './physics/model';
 import { stepSystem } from './physics/model';
 import type { TransferTarget } from './physics/transferSolver';
@@ -15,6 +19,7 @@ import {
   detectInfrastructureCollision,
   didPassCatchAngle,
   getAvailableTransfers,
+  getTransferAvailabilityIssue,
   getAngularCatchError,
   resolveTransfer,
   resolveCaughtTransfer,
@@ -28,6 +33,7 @@ type BeanstalkGameOptions = {
   statsDisplay: HTMLElement | null;
   selectionDisplay: HTMLElement | null;
   admiralDisplay: HTMLElement | null;
+  admiralPortraitDisplay: HTMLImageElement | null;
   achievementNotifier?: (message: string) => void;
   achievementUnlocker?: (id: BeanstalkAchievementId) => void;
 };
@@ -56,14 +62,18 @@ const CIVIC_PRIME_SOURCE_ID = 'civic-prime-space-gun';
 export class BeanstalkConductorGame {
   private readonly canvas: HTMLCanvasElement;
   private readonly context: CanvasRenderingContext2D;
+  private readonly civicPrimeImage = new Image();
+  private readonly fleetCentralImage = new Image();
   private readonly statsDisplay: HTMLElement | null;
   private readonly selectionDisplay: HTMLElement | null;
   private readonly admiralDisplay: HTMLElement | null;
+  private readonly admiralPortraitDisplay: HTMLImageElement | null;
   private readonly achievementNotifier?: (message: string) => void;
   private readonly achievementUnlocker?: (id: BeanstalkAchievementId) => void;
   private state: BeanstalkSystemState = createInitialBeanstalkSystem();
   private moneyVBucks = 5000;
   private selectedIndex = 0;
+  private selectedTransferKey: string | null = null;
   private animationFrame: number | null = null;
   private lastTimestamp = 0;
   private activeTransfer: ActiveTransfer | null = null;
@@ -79,9 +89,12 @@ export class BeanstalkConductorGame {
       throw new Error('Beanstalk Conductor needs a 2D canvas context.');
     }
     this.context = context;
+    this.civicPrimeImage.src = civicPrimeUrl;
+    this.fleetCentralImage.src = fleetCentralUrl;
     this.statsDisplay = options.statsDisplay;
     this.selectionDisplay = options.selectionDisplay;
     this.admiralDisplay = options.admiralDisplay;
+    this.admiralPortraitDisplay = options.admiralPortraitDisplay;
     this.achievementNotifier = options.achievementNotifier;
     this.achievementUnlocker = options.achievementUnlocker;
     options.container.replaceChildren(this.canvas);
@@ -123,17 +136,20 @@ export class BeanstalkConductorGame {
 
   private readonly handleKeyDown = (event: KeyboardEvent): void => {
     const transfers = getAvailableTransfers(this.state);
+    this.reconcileSelectedTransfer(transfers);
     if (this.activeTransfer || this.activeSourceLoad || this.gameOver) {
       return;
     }
     if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
       event.preventDefault();
       this.selectedIndex = transfers.length > 0 ? (this.selectedIndex + 1) % transfers.length : 0;
+      this.storeSelectedTransfer(transfers);
     } else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
       event.preventDefault();
       this.selectedIndex = transfers.length > 0
         ? (this.selectedIndex - 1 + transfers.length) % transfers.length
         : 0;
+      this.storeSelectedTransfer(transfers);
     } else if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       this.launchSelectedTransfer(transfers);
@@ -145,18 +161,26 @@ export class BeanstalkConductorGame {
       return;
     }
     const transfers = getAvailableTransfers(this.state);
+    this.reconcileSelectedTransfer(transfers);
     const clicked = this.transferAtCanvasPoint(event, transfers);
     if (!clicked) {
       return;
     }
     this.selectedIndex = clicked.index;
+    this.storeSelectedTransfer(transfers);
     this.launchSelectedTransfer(transfers);
   };
 
   private launchSelectedTransfer(transfers: TransferOpportunity[]): void {
+    this.reconcileSelectedTransfer(transfers);
     const target = transfers[this.selectedIndex];
     if (!target) {
       this.message = 'Admiral Voss: There is no legal transfer queued.';
+      return;
+    }
+    const issue = getTransferAvailabilityIssue(this.state, target);
+    if (issue) {
+      this.message = issue.message;
       return;
     }
     this.awardFirstLaunch();
@@ -281,6 +305,7 @@ export class BeanstalkConductorGame {
         this.activeTransfer = null;
         if (caughtTarget.destinationKind) {
           this.selectedIndex = 0;
+          this.selectedTransferKey = null;
         } else {
           this.selectOpportunityForMass(caughtTarget.targetBarbellId, caughtTarget.targetEndpoint, caughtTarget.kind);
         }
@@ -343,19 +368,22 @@ export class BeanstalkConductorGame {
   }
 
   private drawPlanet(ctx: CanvasRenderingContext2D, center: Vec2, scale: number): void {
+    const radius = this.state.planetRadius * scale;
     ctx.save();
     ctx.translate(center.x, center.y);
-    ctx.beginPath();
-    ctx.arc(0, 0, this.state.planetRadius * scale, 0, Math.PI * 2);
-    ctx.fillStyle = '#356faa';
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(-12 * scale, 4 * scale, 20 * scale, 11 * scale, -0.4, 0, Math.PI * 2);
-    ctx.fillStyle = '#4c9b68';
-    ctx.fill();
-    ctx.beginPath();
-    ctx.ellipse(16 * scale, -13 * scale, 13 * scale, 8 * scale, 0.55, 0, Math.PI * 2);
-    ctx.fill();
+    if (this.civicPrimeImage.complete && this.civicPrimeImage.naturalWidth > 0) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(this.civicPrimeImage, -radius, -radius, radius * 2, radius * 2);
+      ctx.restore();
+    } else {
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.fillStyle = '#356faa';
+      ctx.fill();
+    }
     this.drawSurfaceCannon(ctx, scale);
     ctx.restore();
   }
@@ -364,11 +392,11 @@ export class BeanstalkConductorGame {
     const radius = this.state.planetRadius * scale;
     ctx.save();
     ctx.rotate(0);
-    ctx.translate(radius - 2 * scale, 0);
+    ctx.translate(radius - 7 * scale, 0);
     ctx.fillStyle = '#eac460';
-    ctx.fillRect(-3 * scale, -4 * scale, 12 * scale, 8 * scale);
+    ctx.fillRect(-5 * scale, -4 * scale, 13 * scale, 8 * scale);
     ctx.fillStyle = '#d7e1de';
-    ctx.fillRect(4 * scale, -2 * scale, 15 * scale, 4 * scale);
+    ctx.fillRect(3 * scale, -2 * scale, 18 * scale, 4 * scale);
     ctx.restore();
   }
 
@@ -382,19 +410,24 @@ export class BeanstalkConductorGame {
     ctx.save();
     ctx.translate(point.x, point.y);
     ctx.rotate(-angle);
-    ctx.fillStyle = '#0f172a';
-    ctx.strokeStyle = '#93c5fd';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.rect(-13, -8, 26, 16);
-    ctx.fill();
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(-22, 0);
-    ctx.lineTo(-13, 0);
-    ctx.moveTo(13, 0);
-    ctx.lineTo(22, 0);
-    ctx.stroke();
+    if (imageIsReady(this.fleetCentralImage)) {
+      const size = 38 * scale;
+      ctx.drawImage(this.fleetCentralImage, -size * 0.5, -size * 0.5, size, size);
+    } else {
+      ctx.fillStyle = '#0f172a';
+      ctx.strokeStyle = '#93c5fd';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.rect(-13, -8, 26, 16);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-22, 0);
+      ctx.lineTo(-13, 0);
+      ctx.moveTo(13, 0);
+      ctx.lineTo(22, 0);
+      ctx.stroke();
+    }
     ctx.fillStyle = '#dbeafe';
     ctx.font = '11px system-ui, sans-serif';
     ctx.textAlign = 'center';
@@ -404,6 +437,7 @@ export class BeanstalkConductorGame {
 
   private drawBarbells(ctx: CanvasRenderingContext2D, center: Vec2, scale: number): void {
     const transfers = getAvailableTransfers(this.state);
+    this.reconcileSelectedTransfer(transfers);
     const selected = transfers[this.selectedIndex];
     for (const barbell of this.state.barbells) {
       const inner = getEndpointState(barbell, 'inner');
@@ -487,7 +521,7 @@ export class BeanstalkConductorGame {
       return;
     }
     const eased = progress * progress * (3 - 2 * progress);
-    const position = add(source, scaleVector(sub(target, source), eased));
+    const position = horizontalLaunchPath(source, target, eased);
     const point = worldToCanvas(position, center, scale);
     ctx.beginPath();
     ctx.arc(point.x, point.y, 7, 0, Math.PI * 2);
@@ -601,6 +635,7 @@ export class BeanstalkConductorGame {
       && transfer.sourceEndpoint === endpoint
     ));
     this.selectedIndex = index >= 0 ? index : 0;
+    this.storeSelectedTransfer(transfers);
   }
 
   private drawGameOver(ctx: CanvasRenderingContext2D, width: number, height: number): void {
@@ -618,6 +653,7 @@ export class BeanstalkConductorGame {
 
   private updateDisplays(): void {
     const transfers = getAvailableTransfers(this.state);
+    this.reconcileSelectedTransfer(transfers);
     const selected = transfers[this.selectedIndex];
     if (this.statsDisplay) {
       this.statsDisplay.textContent = `${this.moneyVBucks} vBucks | t=${this.state.timeSeconds.toFixed(1)} s`;
@@ -634,6 +670,31 @@ export class BeanstalkConductorGame {
     if (this.admiralDisplay) {
       this.admiralDisplay.textContent = this.message;
     }
+    if (this.admiralPortraitDisplay) {
+      const portraitUrl = this.getAdmiralPortraitUrl();
+      if (this.admiralPortraitDisplay.getAttribute('src') !== portraitUrl) {
+        this.admiralPortraitDisplay.src = portraitUrl;
+      }
+    }
+  }
+
+  private getAdmiralPortraitUrl(): string {
+    if (this.gameOver || this.message.includes('intersected')) {
+      return admiralVossPanicUrl;
+    }
+    if (this.moneyVBucks < 1000) {
+      return admiralVossPanicUrl;
+    }
+    if (this.moneyVBucks < 2200 || this.message.includes('No usable') || this.message.includes('cannot launch')) {
+      return admiralVossAlarmedUrl;
+    }
+    if (this.message.includes('accepted') || this.message.includes('Source load complete')) {
+      return admiralVossApprovalUrl;
+    }
+    if (this.message.includes('Correction') || this.message.includes('Catch speed') || this.message.includes('Feed transfer')) {
+      return admiralVossConcernUrl;
+    }
+    return admiralVossUrl;
   }
 
   private awardFirstLaunch(): void {
@@ -644,6 +705,43 @@ export class BeanstalkConductorGame {
     this.achievementUnlocker?.('first-mass-launch');
     this.achievementNotifier?.('Beanstalk Conductor: launch a mass');
   }
+
+  private reconcileSelectedTransfer(transfers: TransferOpportunity[]): void {
+    if (transfers.length <= 0) {
+      this.selectedIndex = 0;
+      this.selectedTransferKey = null;
+      return;
+    }
+    if (this.selectedTransferKey) {
+      const existingIndex = transfers.findIndex(transfer => this.transferKey(transfer) === this.selectedTransferKey);
+      if (existingIndex >= 0) {
+        this.selectedIndex = existingIndex;
+        return;
+      }
+    }
+    if (this.selectedIndex < 0 || this.selectedIndex >= transfers.length) {
+      this.selectedIndex = 0;
+    }
+    this.storeSelectedTransfer(transfers);
+  }
+
+  private storeSelectedTransfer(transfers: TransferOpportunity[]): void {
+    this.selectedTransferKey = transfers[this.selectedIndex]
+      ? this.transferKey(transfers[this.selectedIndex])
+      : null;
+  }
+
+  private transferKey(transfer: TransferOpportunity): string {
+    return [
+      transfer.mode,
+      transfer.kind,
+      transfer.sourceBarbellId,
+      transfer.sourceEndpoint,
+      transfer.targetBarbellId,
+      transfer.targetEndpoint,
+      transfer.destinationKind ?? 'barbell-end',
+    ].join(':');
+  }
 }
 
 function worldToCanvas(position: Vec2, center: Vec2, scale: number): Vec2 {
@@ -651,4 +749,24 @@ function worldToCanvas(position: Vec2, center: Vec2, scale: number): Vec2 {
     x: center.x + position.x * scale,
     y: center.y - position.y * scale,
   };
+}
+
+function horizontalLaunchPath(source: Vec2, target: Vec2, progress: number): Vec2 {
+  const direction = target.x >= source.x ? 1 : -1;
+  const controlDistance = Math.max(35, Math.abs(target.x - source.x) * 0.35);
+  const controlA = { x: source.x + direction * controlDistance, y: source.y };
+  const controlB = { x: target.x - direction * controlDistance, y: target.y };
+  const inverse = 1 - progress;
+  const a = inverse * inverse * inverse;
+  const b = 3 * inverse * inverse * progress;
+  const c = 3 * inverse * progress * progress;
+  const d = progress * progress * progress;
+  return {
+    x: source.x * a + controlA.x * b + controlB.x * c + target.x * d,
+    y: source.y * a + controlA.y * b + controlB.y * c + target.y * d,
+  };
+}
+
+function imageIsReady(image: HTMLImageElement): boolean {
+  return image.complete && image.naturalWidth > 0;
 }

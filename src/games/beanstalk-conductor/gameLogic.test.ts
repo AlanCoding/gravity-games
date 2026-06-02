@@ -2,13 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { createInitialBeanstalkSystem, DYNAMIC_MASS_TONS, getFleetCentralState } from './physics/initialState';
 import {
   type BeanstalkSystemState,
+  getEndpointState,
   getSystemAngularMomentumAbout,
+  length,
+  stepSystem,
 } from './physics/model';
 import {
   createTransferLaunch,
   detectInfrastructureCollision,
   didPassCatchAngle,
   getAvailableTransfers,
+  getTransferAvailabilityIssue,
   resolveCaughtTransfer,
   resolveTransfer,
   simulateToAngularCatch,
@@ -90,22 +94,94 @@ describe('Beanstalk Conductor game logic', () => {
     expect(resolved.message).toContain('Downmass released from Fleet Central');
   });
 
-  it('keeps Civic Prime selectable when only one first-stage upmass slot is filled', () => {
+  it('hides Civic Prime when the lowest first-stage upmass endpoint is already filled', () => {
     const state = createInitialBeanstalkSystem();
     state.barbells[0].inner.upmassTons = DYNAMIC_MASS_TONS;
     const sourceLoad = getAvailableTransfers(state).find(transfer => transfer.sourceBarbellId === 'civic-prime-space-gun');
 
-    expect(sourceLoad).toBeDefined();
-    expect(sourceLoad?.targetEndpoint).toBe('outer');
+    expect(sourceLoad).toBeUndefined();
   });
 
-  it('does not offer a Civic Prime source feed that cuts through the planet', () => {
+  it('keeps Civic Prime selectable when only the higher first-stage upmass endpoint is filled', () => {
+    const state = createInitialBeanstalkSystem();
+    state.barbells[0].outer.upmassTons = DYNAMIC_MASS_TONS;
+    const sourceLoad = getAvailableTransfers(state).find(transfer => transfer.sourceBarbellId === 'civic-prime-space-gun');
+
+    expect(sourceLoad).toBeDefined();
+    expect(sourceLoad?.targetEndpoint).toBe('inner');
+  });
+
+  it('loads Civic Prime upmass into the nearest radial endpoint when endpoint names are swapped', () => {
+    const state = createInitialBeanstalkSystem();
+    state.barbells[0].angleRad = Math.PI;
+    const sourceLoad = getAvailableTransfers(state).find(transfer => transfer.sourceBarbellId === 'civic-prime-space-gun');
+    const lowerEndpoint = length(getEndpointState(state.barbells[0], 'outer').position)
+      < length(getEndpointState(state.barbells[0], 'inner').position)
+      ? 'outer'
+      : 'inner';
+
+    expect(sourceLoad).toBeDefined();
+    expect(sourceLoad?.targetEndpoint).toBe(lowerEndpoint);
+  });
+
+  it('loads Fleet Central downmass into the farthest radial endpoint when endpoint names are swapped', () => {
+    const state = createInitialBeanstalkSystem();
+    state.barbells[2].angleRad = Math.PI;
+    const sourceLoad = getAvailableTransfers(state).find(transfer => transfer.sourceBarbellId === 'fleet-central-downmass-source');
+    const higherEndpoint = length(getEndpointState(state.barbells[2], 'outer').position)
+      > length(getEndpointState(state.barbells[2], 'inner').position)
+      ? 'outer'
+      : 'inner';
+
+    expect(sourceLoad).toBeDefined();
+    expect(sourceLoad?.targetEndpoint).toBe(higherEndpoint);
+  });
+
+  it('targets the nearest radial endpoint on the next barbell for upward transfers', () => {
+    const state = createInitialBeanstalkSystem();
+    state.barbells[0].outer.upmassTons = DYNAMIC_MASS_TONS;
+    state.barbells[1].angleRad = -Math.PI / 2;
+    const transfer = getAvailableTransfers(state).find(candidate => (
+      candidate.mode === 'transfer'
+      && candidate.kind === 'upmass'
+      && candidate.targetBarbellId === 'stage-2'
+    ));
+    const lowerEndpoint = length(getEndpointState(state.barbells[1], 'outer').position)
+      < length(getEndpointState(state.barbells[1], 'inner').position)
+      ? 'outer'
+      : 'inner';
+
+    expect(transfer).toBeDefined();
+    expect(transfer?.targetEndpoint).toBe(lowerEndpoint);
+  });
+
+  it('keeps the starting source selections available and radially ordered while the system idles', () => {
+    let state = createInitialBeanstalkSystem();
+
+    for (let step = 0; step < 20; step += 1) {
+      const sourceIds = getAvailableTransfers(state)
+        .filter(transfer => transfer.mode === 'source-load')
+        .map(transfer => transfer.sourceBarbellId);
+
+      expect(sourceIds).toEqual([
+        'civic-prime-space-gun',
+        'fleet-central-downmass-source',
+      ]);
+      state = stepSystem(state, 1);
+    }
+  });
+
+  it('reports a blocked Civic Prime source feed at launch time without hiding it from selection', () => {
     const state = createInitialBeanstalkSystem();
     state.barbells[0].center = { x: -88, y: 0 };
     state.barbells[0].angleRad = Math.PI;
-    const transfers = getAvailableTransfers(state);
+    const sourceLoad = getAvailableTransfers(state).find(transfer => transfer.sourceBarbellId === 'civic-prime-space-gun');
 
-    expect(transfers.some(transfer => transfer.sourceBarbellId === 'civic-prime-space-gun')).toBe(false);
+    expect(sourceLoad).toBeDefined();
+    expect(getTransferAvailabilityIssue(state, sourceLoad!)).toEqual({
+      reason: 'surface-launch-obstructed',
+      message: 'Admiral Voss: Civic Prime cannot launch through the planet. Wait for a clear mass-driver line.',
+    });
   });
 
   it('resolves a selected transfer into endpoint fill and vBuck cost', () => {
@@ -160,6 +236,33 @@ describe('Beanstalk Conductor game logic', () => {
     expect(resolved.costVBucks).toBe(0);
     expect(barbell?.inner.upmassTons).toBe(0);
     expect(barbell?.outer.upmassTons).toBe(cross!.massTons);
+  });
+
+  it('does not offer an upmass tether shift when the higher radial endpoint is already occupied', () => {
+    const state = createInitialBeanstalkSystem();
+    state.barbells[0].inner.upmassTons = DYNAMIC_MASS_TONS;
+    state.barbells[0].outer.upmassTons = DYNAMIC_MASS_TONS;
+    const blocked = getAvailableTransfers(state).find(candidate => (
+      candidate.mode === 'cross-tether'
+      && candidate.kind === 'upmass'
+      && candidate.sourceBarbellId === 'stage-1'
+    ));
+
+    expect(blocked).toBeUndefined();
+  });
+
+  it('does not offer an upward transfer when the next lower radial endpoint is already occupied', () => {
+    const state = createInitialBeanstalkSystem();
+    state.barbells[0].outer.upmassTons = DYNAMIC_MASS_TONS;
+    state.barbells[1].inner.upmassTons = DYNAMIC_MASS_TONS;
+    const blocked = getAvailableTransfers(state).find(candidate => (
+      candidate.mode === 'transfer'
+      && candidate.kind === 'upmass'
+      && candidate.sourceBarbellId === 'stage-1'
+      && candidate.targetBarbellId === 'stage-2'
+    ));
+
+    expect(blocked).toBeUndefined();
   });
 
   it('conserves total angular momentum across a full user-directed upmass cycle', () => {

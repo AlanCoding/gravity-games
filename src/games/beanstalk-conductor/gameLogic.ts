@@ -41,6 +41,11 @@ export type TransferLaunch = {
   previousAngularError: number;
 };
 
+export type TransferAvailabilityIssue = {
+  reason: 'surface-launch-obstructed';
+  message: string;
+};
+
 const DEFAULT_TRANSFER_SECONDS = 10;
 const CIVIC_PRIME_SOURCE_ID = 'civic-prime-space-gun';
 const FLEET_CENTRAL_SOURCE_ID = 'fleet-central-downmass-source';
@@ -70,10 +75,8 @@ export function getAvailableTransfers(state: BeanstalkSystemState): TransferOppo
   const first = ordered[0];
   const last = ordered[ordered.length - 1];
 
-  const civicPrimeUpmassTarget = first
-    ? getFirstOpenEndpoint(first, 'upmass', ['inner', 'outer'])
-    : null;
-  if (first && civicPrimeUpmassTarget && isClearSurfaceLaunch(state, first, civicPrimeUpmassTarget)) {
+  const civicPrimeUpmassTarget = first ? getEndpointsByRadius(first)[0] : null;
+  if (first && civicPrimeUpmassTarget && first[civicPrimeUpmassTarget].upmassTons <= 0) {
     transfers.push({
       mode: 'source-load',
       sourceBarbellId: CIVIC_PRIME_SOURCE_ID,
@@ -87,10 +90,8 @@ export function getAvailableTransfers(state: BeanstalkSystemState): TransferOppo
     });
   }
 
-  const fleetCentralDownmassTarget = last
-    ? getFirstOpenEndpoint(last, 'downmass', ['outer', 'inner'])
-    : null;
-  if (last && fleetCentralDownmassTarget) {
+  const fleetCentralDownmassTarget = last ? getEndpointsByRadius(last)[1] : null;
+  if (last && fleetCentralDownmassTarget && last[fleetCentralDownmassTarget].downmassTons <= 0) {
     transfers.push({
       mode: 'source-load',
       sourceBarbellId: FLEET_CENTRAL_SOURCE_ID,
@@ -108,95 +109,102 @@ export function getAvailableTransfers(state: BeanstalkSystemState): TransferOppo
     const current = ordered[index];
     const nextOuter = ordered[index + 1];
     const nextInner = ordered[index - 1];
+    const [lowerEndpoint, higherEndpoint] = getEndpointsByRadius(current);
 
-    if (nextOuter && current.outer.upmassTons > 0) {
-      transfers.push({
-        mode: 'transfer',
-        sourceBarbellId: current.id,
-        sourceEndpoint: 'outer',
-        targetBarbellId: nextOuter.id,
-        targetEndpoint: 'inner',
-        kind: 'upmass',
-        massTons: current.outer.upmassTons,
-        durationSeconds: DEFAULT_TRANSFER_SECONDS,
-        label: `${current.id} upmass to ${nextOuter.id}`,
-      });
+    if (nextOuter && current[higherEndpoint].upmassTons > 0) {
+      const targetEndpoint = getEndpointsByRadius(nextOuter)[0];
+      if (nextOuter[targetEndpoint].upmassTons <= 0) {
+        transfers.push({
+          mode: 'transfer',
+          sourceBarbellId: current.id,
+          sourceEndpoint: higherEndpoint,
+          targetBarbellId: nextOuter.id,
+          targetEndpoint,
+          kind: 'upmass',
+          massTons: current[higherEndpoint].upmassTons,
+          durationSeconds: DEFAULT_TRANSFER_SECONDS,
+          label: `${current.id} upmass to ${nextOuter.id}`,
+        });
+      }
     }
 
-    if (!nextOuter && current.outer.upmassTons > 0) {
+    if (!nextOuter && current[higherEndpoint].upmassTons > 0) {
       transfers.push({
         mode: 'transfer',
         sourceBarbellId: current.id,
-        sourceEndpoint: 'outer',
+        sourceEndpoint: higherEndpoint,
         targetBarbellId: FLEET_CENTRAL_TARGET_ID,
         targetEndpoint: 'inner',
         destinationKind: 'fleet-central',
         kind: 'upmass',
-        massTons: current.outer.upmassTons,
+        massTons: current[higherEndpoint].upmassTons,
         durationSeconds: DEFAULT_TRANSFER_SECONDS,
         label: `${current.id} upmass to Fleet Central`,
       });
     }
 
-    if (current.inner.upmassTons > 0) {
+    if (current[lowerEndpoint].upmassTons > 0 && current[higherEndpoint].upmassTons <= 0) {
       transfers.push({
         mode: 'cross-tether',
         sourceBarbellId: current.id,
-        sourceEndpoint: 'inner',
+        sourceEndpoint: lowerEndpoint,
         targetBarbellId: current.id,
-        targetEndpoint: 'outer',
+        targetEndpoint: higherEndpoint,
         kind: 'upmass',
-        massTons: current.inner.upmassTons,
+        massTons: current[lowerEndpoint].upmassTons,
         durationSeconds: 0,
         label: `${current.id} upmass across tether`,
       });
     }
 
-    if (nextInner && current.inner.downmassTons > 0) {
-      transfers.push({
-        mode: 'transfer',
-        sourceBarbellId: current.id,
-        sourceEndpoint: 'inner',
-        targetBarbellId: nextInner.id,
-        targetEndpoint: 'outer',
-        kind: 'downmass',
-        massTons: current.inner.downmassTons,
-        durationSeconds: DEFAULT_TRANSFER_SECONDS,
-        label: `${current.id} downmass to ${nextInner.id}`,
-      });
+    if (nextInner && current[lowerEndpoint].downmassTons > 0) {
+      const targetEndpoint = getEndpointsByRadius(nextInner)[1];
+      if (nextInner[targetEndpoint].downmassTons <= 0) {
+        transfers.push({
+          mode: 'transfer',
+          sourceBarbellId: current.id,
+          sourceEndpoint: lowerEndpoint,
+          targetBarbellId: nextInner.id,
+          targetEndpoint,
+          kind: 'downmass',
+          massTons: current[lowerEndpoint].downmassTons,
+          durationSeconds: DEFAULT_TRANSFER_SECONDS,
+          label: `${current.id} downmass to ${nextInner.id}`,
+        });
+      }
     }
 
-    if (!nextInner && current.inner.downmassTons > 0) {
+    if (!nextInner && current[lowerEndpoint].downmassTons > 0) {
       transfers.push({
         mode: 'transfer',
         sourceBarbellId: current.id,
-        sourceEndpoint: 'inner',
+        sourceEndpoint: lowerEndpoint,
         targetBarbellId: PLANET_DISPOSAL_TARGET_ID,
         targetEndpoint: 'outer',
         destinationKind: 'planet-disposal',
         kind: 'downmass',
-        massTons: current.inner.downmassTons,
+        massTons: current[lowerEndpoint].downmassTons,
         durationSeconds: DEFAULT_TRANSFER_SECONDS,
         label: `${current.id} downmass disposal to Civic Prime`,
       });
     }
 
-    if (current.outer.downmassTons > 0) {
+    if (current[higherEndpoint].downmassTons > 0 && current[lowerEndpoint].downmassTons <= 0) {
       transfers.push({
         mode: 'cross-tether',
         sourceBarbellId: current.id,
-        sourceEndpoint: 'outer',
+        sourceEndpoint: higherEndpoint,
         targetBarbellId: current.id,
-        targetEndpoint: 'inner',
+        targetEndpoint: lowerEndpoint,
         kind: 'downmass',
-        massTons: current.outer.downmassTons,
+        massTons: current[higherEndpoint].downmassTons,
         durationSeconds: 0,
         label: `${current.id} downmass across tether`,
       });
     }
   }
 
-  return transfers;
+  return transfers.sort((a, b) => getTransferSourceRadius(state, a) - getTransferSourceRadius(state, b));
 }
 
 export function resolveTransfer(
@@ -259,6 +267,26 @@ export function resolveTransfer(
   const launch = createTransferLaunch(state, target);
   const caught = simulateToAngularCatch(launch);
   return resolveCaughtTransfer(caught.state, target, launch.correctionMagnitude);
+}
+
+export function getTransferAvailabilityIssue(
+  state: BeanstalkSystemState,
+  target: TransferTarget,
+): TransferAvailabilityIssue | null {
+  if (target.sourceBarbellId !== CIVIC_PRIME_SOURCE_ID) {
+    return null;
+  }
+  const targetBarbell = state.barbells.find(barbell => barbell.id === target.targetBarbellId);
+  if (!targetBarbell) {
+    return null;
+  }
+  if (isClearSurfaceLaunch(state, targetBarbell, target.targetEndpoint)) {
+    return null;
+  }
+  return {
+    reason: 'surface-launch-obstructed',
+    message: 'Admiral Voss: Civic Prime cannot launch through the planet. Wait for a clear mass-driver line.',
+  };
 }
 
 function isSourceLoad(target: TransferTarget): boolean {
@@ -472,13 +500,26 @@ export function detectInfrastructureCollision(state: BeanstalkSystemState): Infr
   return null;
 }
 
-function getFirstOpenEndpoint(
-  barbell: BeanstalkSystemState['barbells'][number],
-  kind: 'upmass' | 'downmass',
-  endpoints: EndpointKey[],
-): EndpointKey | null {
-  const key = kind === 'upmass' ? 'upmassTons' : 'downmassTons';
-  return endpoints.find(endpoint => barbell[endpoint][key] <= 0) ?? null;
+function getEndpointsByRadius(barbell: BeanstalkSystemState['barbells'][number]): [EndpointKey, EndpointKey] {
+  const innerRadius = length(getEndpointState(barbell, 'inner').position);
+  const outerRadius = length(getEndpointState(barbell, 'outer').position);
+  return innerRadius <= outerRadius ? ['inner', 'outer'] : ['outer', 'inner'];
+}
+
+function getTransferSourceRadius(state: BeanstalkSystemState, transfer: TransferOpportunity): number {
+  if (transfer.sourceBarbellId === CIVIC_PRIME_SOURCE_ID) {
+    return state.planetRadius;
+  }
+  if (transfer.sourceBarbellId === FLEET_CENTRAL_SOURCE_ID) {
+    return getFleetCentralState({
+      timeSeconds: state.timeSeconds,
+      gravitationalParameter: state.gravitationalParameter,
+    }).orbitRadius;
+  }
+  const sourceBarbell = state.barbells.find(barbell => barbell.id === transfer.sourceBarbellId);
+  return sourceBarbell
+    ? length(getEndpointState(sourceBarbell, transfer.sourceEndpoint).position)
+    : Number.POSITIVE_INFINITY;
 }
 
 function isClearSurfaceLaunch(

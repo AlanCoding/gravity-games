@@ -359,29 +359,10 @@ h1 {
   gap: 0.75rem;
 }
 
-.beanstalk-menu-shell {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(18rem, 24rem);
-  gap: 0.75rem;
-  min-height: min(76vh, 760px);
-}
-
-.beanstalk-menu-art-wrap {
-  min-height: 520px;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(16, 20, 23, 0.8);
-  backdrop-filter: blur(18px);
-}
-
 .beanstalk-menu-art {
   display: block;
   width: 100%;
   height: 100%;
-}
-
-.beanstalk-menu-panel {
-  align-self: stretch;
 }
 
 .beanstalk-menu-actions {
@@ -417,29 +398,47 @@ h1 {
   font-weight: 400;
 }
 
-.beanstalk-story-page {
-  width: min(1040px, 100%);
-}
-
 .beanstalk-story-panel {
-  grid-template-columns: minmax(20rem, 1fr) minmax(0, 1fr);
-  align-items: stretch;
-  min-height: min(62vh, 620px);
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) 12rem;
+  gap: 0.75rem;
+  padding: 0.9rem;
+  overflow: hidden;
+  outline: 2px solid transparent;
 }
 
 .beanstalk-story-copy {
-  display: grid;
-  align-content: center;
-  gap: 0.75rem;
+  display: block;
+  width: 60%;
+  justify-self: start;
+  height: 100%;
+  margin: 0;
+  padding: 0 0.75rem 0.3rem;
+  overflow: hidden;
+  color: #f8fafc;
+  font: 700 1.05rem/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  text-align: left;
+  text-shadow: 0 2px 0 #050709, 0 0 12px rgba(5, 7, 9, 0.9);
+  white-space: pre-wrap;
+  transform: translateX(33.333%);
 }
 
-.story-advance-button {
-  justify-self: start;
-  margin-top: 0.4rem;
+.beanstalk-tutorial-panel h1 {
+  margin: 0;
+}
+
+.beanstalk-story-image,
+.story-image-placeholder {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: contain;
+  background: #050709;
 }
 
 .story-image-placeholder {
-  min-height: 240px;
   display: grid;
   place-items: center;
   padding: 1rem;
@@ -450,6 +449,40 @@ h1 {
     rgba(255, 255, 255, 0.05);
   text-align: center;
   font-size: 0.9rem;
+}
+
+.beanstalk-screen-stage {
+  min-height: min(82vh, 820px);
+  aspect-ratio: 16 / 9;
+  max-height: calc(100vh - 3rem);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: #050709;
+}
+
+.beanstalk-screen-panel {
+  width: min(25rem, calc(50% - 1rem));
+  max-width: min(25rem, calc(50% - 1rem));
+}
+
+.beanstalk-menu-center-panel {
+  top: 50%;
+  left: 50%;
+  right: auto;
+  transform: translate(-50%, -50%);
+}
+
+.beanstalk-tutorial-panel {
+  width: min(42rem, calc(100% - 2rem));
+  align-self: end;
+  justify-self: center;
+  display: grid;
+  gap: 0.65rem;
+  margin: 1rem;
+  padding: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(16, 20, 23, 0.84);
+  backdrop-filter: blur(18px);
 }
 
 .beanstalk-game-container,
@@ -509,6 +542,22 @@ h1 {
   top: 0.75rem;
   right: 0.75rem;
   width: min(23rem, calc(50% - 1rem));
+  grid-template-columns: 4.5rem minmax(0, 1fr);
+  align-items: start;
+}
+
+.beanstalk-overlay-right strong,
+.beanstalk-overlay-right p {
+  grid-column: 2;
+}
+
+.beanstalk-admiral-portrait {
+  grid-row: 1 / span 2;
+  width: 4.25rem;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: #050709;
 }
 
 .beanstalk-overlay-right p {
@@ -863,13 +912,13 @@ h1 {
     grid-template-columns: 1fr;
   }
 
-  .beanstalk-menu-shell,
-  .beanstalk-story-panel {
-    grid-template-columns: 1fr;
-  }
-
   .beanstalk-game-container {
     min-height: 420px;
+  }
+
+  .beanstalk-screen-stage {
+    aspect-ratio: 4 / 5;
+    max-height: none;
   }
 
   .beanstalk-overlay {
@@ -877,14 +926,11 @@ h1 {
     max-width: none;
     width: auto;
     margin-top: 0.5rem;
+    transform: none;
   }
 
   .beanstalk-game-stage {
     display: grid;
     min-height: auto;
-  }
-
-  .beanstalk-menu-art-wrap {
-    min-height: 360px;
   }
 }
