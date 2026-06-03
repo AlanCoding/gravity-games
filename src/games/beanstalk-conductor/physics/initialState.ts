@@ -13,7 +13,7 @@ export const CIVIC_PRIME_RADIUS = 48;
 export const CIVIC_PRIME_MU = 12000;
 export const BARBELL_ENDPOINT_DRY_MASS_TONS = 80;
 export const DYNAMIC_MASS_TONS = 12;
-export const FLEET_CENTRAL_ORBIT_RADIUS = 275;
+export const FLEET_CENTRAL_ORBIT_RADIUS = 316.25;
 export const FLEET_CENTRAL_PHASE_RAD = Math.PI / 3;
 
 export type StageSpec = {

@@ -10,15 +10,21 @@ import {
   getEndpointState,
   length,
   moveFillAcrossBarbell,
-  scale,
   stepSystem,
   sub,
 } from './physics/model';
 import {
+  createPayloadFromSourceState,
+  getTransferSourceState,
   solveTransferCorrection,
   type TransferTarget,
+  type TransferSolveResult,
 } from './physics/transferSolver';
-import { DYNAMIC_MASS_TONS, createSurfaceLauncherState, getFleetCentralState } from './physics/initialState';
+import {
+  estimateCircularTransferTiming,
+  type TransferTimingResult,
+} from './physics/transferTiming';
+import { DYNAMIC_MASS_TONS, getFleetCentralState } from './physics/initialState';
 
 export type TransferOpportunity = TransferTarget & {
   label: string;
@@ -29,8 +35,10 @@ export type TransferResolution = {
   state: BeanstalkSystemState;
   costVBucks: number;
   correctionMagnitude: number;
+  releaseSpeed: number;
   deliveredTons: number;
   relativeCatchSpeed: number;
+  altitudeError: number;
   message: string;
 };
 
@@ -38,7 +46,12 @@ export type TransferLaunch = {
   state: BeanstalkSystemState;
   target: TransferTarget;
   correctionMagnitude: number;
+  releaseSpeed: number;
   previousAngularError: number;
+  catchArmed: boolean;
+  angularTravel: number;
+  minCatchSeconds: number;
+  elapsedSeconds: number;
 };
 
 export type TransferAvailabilityIssue = {
@@ -52,8 +65,9 @@ const FLEET_CENTRAL_SOURCE_ID = 'fleet-central-downmass-source';
 const FLEET_CENTRAL_TARGET_ID = 'fleet-central';
 const PLANET_DISPOSAL_TARGET_ID = 'civic-prime-disposal';
 const UPMASS_REVENUE_PER_TON = 500;
-const DOWNMASS_RELEASE_COST_PER_TON = 125;
 const FLEET_CENTRAL_COLLISION_RADIUS = 10;
+const CATCH_ARM_ANGLE_RAD = 0.015;
+const MAX_TRANSFER_ANGULAR_TRAVEL_RAD = Math.PI * 2;
 
 export type InfrastructureCollision = {
   kind: 'planet' | 'fleet-central';
@@ -62,7 +76,8 @@ export type InfrastructureCollision = {
 
 export class TransferSolveFailure extends Error {
   constructor(
-    readonly reason: 'no-angular-crossing' | 'no-scalar-root' | 'unknown',
+    readonly reason: 'no-angular-crossing' | 'no-scalar-root' | 'retrograde-root' | 'unknown',
+    readonly solveResult?: TransferSolveResult,
   ) {
     super('No valid release window is available.');
     this.name = 'TransferSolveFailure';
@@ -85,8 +100,8 @@ export function getAvailableTransfers(state: BeanstalkSystemState): TransferOppo
       targetEndpoint: civicPrimeUpmassTarget,
       kind: 'upmass',
       massTons: DYNAMIC_MASS_TONS,
-      durationSeconds: 0,
-      label: `load ${DYNAMIC_MASS_TONS}-ton upmass from Civic Prime`,
+      durationSeconds: DEFAULT_TRANSFER_SECONDS,
+      label: `launch ${DYNAMIC_MASS_TONS}-ton upmass from Civic Prime`,
     });
   }
 
@@ -100,8 +115,8 @@ export function getAvailableTransfers(state: BeanstalkSystemState): TransferOppo
       targetEndpoint: fleetCentralDownmassTarget,
       kind: 'downmass',
       massTons: DYNAMIC_MASS_TONS,
-      durationSeconds: 0,
-      label: `load ${DYNAMIC_MASS_TONS}-ton downmass from Fleet Central`,
+      durationSeconds: DEFAULT_TRANSFER_SECONDS,
+      label: `launch ${DYNAMIC_MASS_TONS}-ton downmass from Fleet Central`,
     });
   }
 
@@ -211,31 +226,6 @@ export function resolveTransfer(
   state: BeanstalkSystemState,
   target: TransferTarget,
 ): TransferResolution {
-  if (isSourceLoad(target)) {
-    const resolvedState = cloneSystem(state);
-    replaceBarbell(resolvedState, moveEndpointFill({
-      state: resolvedState,
-      barbellId: target.targetBarbellId,
-      endpoint: target.targetEndpoint,
-      direction: 1,
-      kind: target.kind,
-      massTons: target.massTons,
-    }));
-    const costVBucks = target.sourceBarbellId === FLEET_CENTRAL_SOURCE_ID
-      ? target.massTons * DOWNMASS_RELEASE_COST_PER_TON
-      : 0;
-    return {
-      state: resolvedState,
-      costVBucks,
-      correctionMagnitude: 0,
-      deliveredTons: target.massTons,
-      relativeCatchSpeed: 0,
-      message: target.sourceBarbellId === FLEET_CENTRAL_SOURCE_ID
-        ? `Downmass released from Fleet Central: ${target.massTons.toFixed(0)} tons, -${costVBucks} vBucks.`
-        : `Source load complete: ${target.massTons.toFixed(0)} tons ready.`,
-    };
-  }
-
   if (target.sourceBarbellId === target.targetBarbellId) {
     const resolvedState = cloneSystem(state);
     replaceBarbell(resolvedState, moveEndpointFill({
@@ -258,35 +248,43 @@ export function resolveTransfer(
       state: resolvedState,
       costVBucks: 0,
       correctionMagnitude: 0,
+      releaseSpeed: 0,
       deliveredTons: target.massTons,
       relativeCatchSpeed: 0,
+      altitudeError: 0,
       message: `Tether shift complete: ${target.massTons.toFixed(0)} tons repositioned.`,
     };
   }
 
   const launch = createTransferLaunch(state, target);
   const caught = simulateToAngularCatch(launch);
-  return resolveCaughtTransfer(caught.state, target, launch.correctionMagnitude);
+  return resolveCaughtTransfer(caught.state, target, launch.correctionMagnitude, launch.releaseSpeed);
 }
 
 export function getTransferAvailabilityIssue(
-  state: BeanstalkSystemState,
-  target: TransferTarget,
+  _state: BeanstalkSystemState,
+  _target: TransferTarget,
 ): TransferAvailabilityIssue | null {
-  if (target.sourceBarbellId !== CIVIC_PRIME_SOURCE_ID) {
+  return null;
+}
+
+export function estimateTransferTiming(
+  state: BeanstalkSystemState,
+  transfer: TransferOpportunity,
+): TransferTimingResult | null {
+  if (transfer.mode !== 'transfer' || transfer.destinationKind) {
     return null;
   }
-  const targetBarbell = state.barbells.find(barbell => barbell.id === target.targetBarbellId);
-  if (!targetBarbell) {
+  const sourceBarbell = state.barbells.find(barbell => barbell.id === transfer.sourceBarbellId);
+  const targetBarbell = state.barbells.find(barbell => barbell.id === transfer.targetBarbellId);
+  if (!sourceBarbell || !targetBarbell) {
     return null;
   }
-  if (isClearSurfaceLaunch(state, targetBarbell, target.targetEndpoint)) {
-    return null;
-  }
-  return {
-    reason: 'surface-launch-obstructed',
-    message: 'Admiral Voss: Civic Prime cannot launch through the planet. Wait for a clear mass-driver line.',
-  };
+  return estimateCircularTransferTiming({
+    gravitationalParameter: state.gravitationalParameter,
+    sourcePosition: getEndpointState(sourceBarbell, transfer.sourceEndpoint).position,
+    targetPosition: getEndpointState(targetBarbell, transfer.targetEndpoint).position,
+  });
 }
 
 function isSourceLoad(target: TransferTarget): boolean {
@@ -298,54 +296,80 @@ export function createTransferLaunch(
   target: TransferTarget,
 ): TransferLaunch {
   const launchState = cloneSystem(state);
-  const sourceBarbell = launchState.barbells.find(barbell => barbell.id === target.sourceBarbellId);
-  if (!sourceBarbell) {
-    throw new Error('Transfer launch needs a source barbell.');
-  }
-
   const targetPosition = target.destinationKind === 'planet-disposal'
     ? null
     : getTargetPosition(launchState, target);
   const solved = solveTransferCorrection(state, target);
   if (!solved.converged) {
-    throw new TransferSolveFailure(solved.failureReason ?? 'unknown');
+    throw new TransferSolveFailure(solved.failureReason ?? 'unknown', solved);
   }
-  const detached = detachEndpointMassAsPayload({
-    barbell: sourceBarbell,
-    endpoint: target.sourceEndpoint,
-    kind: target.kind,
-    massTons: target.massTons,
-    payloadId: 'active-payload',
-    deltaVelocity: solved.deltaVelocity,
-  });
-  replaceBarbell(launchState, detached.barbell);
-  launchState.payloads = [detached.payload];
+  const source = getTransferSourceState(launchState, target);
+  if (source.kind === 'barbell-end') {
+    const sourceBarbell = launchState.barbells.find(barbell => barbell.id === target.sourceBarbellId);
+    if (!sourceBarbell) {
+      throw new Error('Transfer launch needs a source barbell.');
+    }
+    const detached = detachEndpointMassAsPayload({
+      barbell: sourceBarbell,
+      endpoint: target.sourceEndpoint,
+      kind: target.kind,
+      massTons: target.massTons,
+      payloadId: 'active-payload',
+      deltaVelocity: solved.deltaVelocity,
+    });
+    replaceBarbell(launchState, detached.barbell);
+    launchState.payloads = [detached.payload];
+  } else {
+    launchState.payloads = [createPayloadFromSourceState('active-payload', target, source, solved.deltaVelocity)];
+  }
 
+  const previousAngularError = target.destinationKind === 'planet-disposal'
+    ? length(launchState.payloads[0].position) - launchState.planetRadius
+    : angularErrorBetween(launchState.payloads[0].position, targetPosition!);
   return {
     state: launchState,
     target,
     correctionMagnitude: solved.correctionMagnitude,
-    previousAngularError: target.destinationKind === 'planet-disposal'
-      ? length(launchState.payloads[0].position) - launchState.planetRadius
-      : angularErrorBetween(launchState.payloads[0].position, targetPosition!),
+    releaseSpeed: length(launchState.payloads[0].velocity),
+    previousAngularError,
+    catchArmed: target.destinationKind === 'planet-disposal' || Math.abs(previousAngularError) >= CATCH_ARM_ANGLE_RAD,
+    angularTravel: 0,
+    minCatchSeconds: solved.minCatchSeconds,
+    elapsedSeconds: 0,
   };
 }
 
 export function stepTransferToCatch(
   launch: TransferLaunch,
   dt: number,
-): { launch: TransferLaunch; caught: boolean } {
+): { launch: TransferLaunch; caught: boolean; missed: boolean } {
   const nextState = stepSystem(launch.state, dt);
   const currentAngularError = getCatchError(nextState, launch.target);
+  const angularTravel = launch.target.destinationKind === 'planet-disposal'
+    ? launch.angularTravel
+    : launch.angularTravel + Math.abs(signedAngularDelta(launch.previousAngularError, currentAngularError));
+  const catchArmed = launch.catchArmed
+    || launch.target.destinationKind === 'planet-disposal'
+    || Math.abs(currentAngularError) >= CATCH_ARM_ANGLE_RAD;
+  const passedCatchAngle = didPassCatchAngle(launch.previousAngularError, currentAngularError);
+  const caught = launch.target.destinationKind === 'planet-disposal'
+    ? launch.previousAngularError > 0 && currentAngularError <= 0
+    : launch.elapsedSeconds >= launch.minCatchSeconds
+      && launch.catchArmed
+      && passedCatchAngle;
   return {
     launch: {
       ...launch,
       state: nextState,
       previousAngularError: currentAngularError,
+      catchArmed,
+      angularTravel,
+      elapsedSeconds: launch.elapsedSeconds + dt,
     },
-    caught: launch.target.destinationKind === 'planet-disposal'
-      ? launch.previousAngularError > 0 && currentAngularError <= 0
-      : didPassCatchAngle(launch.previousAngularError, currentAngularError),
+    caught,
+    missed: !caught
+      && launch.target.destinationKind !== 'planet-disposal'
+      && angularTravel >= MAX_TRANSFER_ANGULAR_TRAVEL_RAD,
   };
 }
 
@@ -357,7 +381,7 @@ export function simulateToAngularCatch(
   },
 ): TransferLaunch {
   const dt = options?.dt ?? 0.05;
-  const maxSeconds = options?.maxSeconds ?? launch.target.durationSeconds * 2;
+  const maxSeconds = options?.maxSeconds ?? launch.target.durationSeconds * 20;
   let elapsed = 0;
   let current = launch;
   while (elapsed < maxSeconds) {
@@ -367,14 +391,18 @@ export function simulateToAngularCatch(
     if (stepped.caught) {
       return current;
     }
+    if (stepped.missed) {
+      throw new TransferSolveFailure('no-angular-crossing');
+    }
   }
-  return current;
+  throw new TransferSolveFailure('no-angular-crossing');
 }
 
 export function resolveCaughtTransfer(
   state: BeanstalkSystemState,
   target: TransferTarget,
   correctionMagnitude: number,
+  releaseSpeed: number,
 ): TransferResolution {
   const payload = state.payloads.find(candidate => candidate.id === 'active-payload');
   if (!payload) {
@@ -387,6 +415,7 @@ export function resolveCaughtTransfer(
       gravitationalParameter: state.gravitationalParameter,
     });
     const relativeCatchSpeed = length(sub(payload.velocity, station.velocity));
+    const altitudeError = length(payload.position) - length(station.position);
     const resolvedState = cloneSystem(state);
     resolvedState.payloads = resolvedState.payloads.filter(candidate => candidate.id !== 'active-payload');
     const correctionCost = Math.round(correctionMagnitude * target.massTons);
@@ -395,8 +424,10 @@ export function resolveCaughtTransfer(
       state: resolvedState,
       costVBucks: correctionCost - revenue,
       correctionMagnitude,
+      releaseSpeed,
       deliveredTons: target.massTons,
       relativeCatchSpeed,
+      altitudeError,
       message: `Fleet Central accepted ${target.massTons.toFixed(0)} tons, +${revenue - correctionCost} vBucks.`,
     };
   }
@@ -409,8 +440,10 @@ export function resolveCaughtTransfer(
       state: resolvedState,
       costVBucks: correctionCost,
       correctionMagnitude,
+      releaseSpeed,
       deliveredTons: target.massTons,
       relativeCatchSpeed: 0,
+      altitudeError: length(payload.position) - state.planetRadius,
       message: `Downmass disposed on Civic Prime: ${target.massTons.toFixed(0)} tons, -${correctionCost} vBucks.`,
     };
   }
@@ -422,8 +455,32 @@ export function resolveCaughtTransfer(
 
   const targetEndpoint = getEndpointState(targetBarbell, target.targetEndpoint);
   const relativeCatchSpeed = length(sub(payload.velocity, targetEndpoint.velocity));
+  const targetPosition = target.sourceBarbellId === FLEET_CENTRAL_SOURCE_ID
+    ? targetBarbell.center
+    : targetEndpoint.position;
+  const altitudeError = length(payload.position) - length(targetPosition);
   const resolvedState = cloneSystem(state);
   resolvedState.payloads = resolvedState.payloads.filter(candidate => candidate.id !== 'active-payload');
+  if (isSourceLoad(target)) {
+    replaceBarbell(resolvedState, moveEndpointFill({
+      state: resolvedState,
+      barbellId: target.targetBarbellId,
+      endpoint: target.targetEndpoint,
+      direction: 1,
+      kind: target.kind,
+      massTons: target.massTons,
+    }));
+    return {
+      state: resolvedState,
+      costVBucks: 0,
+      correctionMagnitude,
+      releaseSpeed,
+      deliveredTons: target.massTons,
+      relativeCatchSpeed,
+      altitudeError,
+      message: `Source transfer complete: ${target.massTons.toFixed(0)} tons received.`,
+    };
+  }
   replaceBarbell(resolvedState, attachPayloadToEndpoint({
     barbell: targetBarbell,
     endpoint: target.targetEndpoint,
@@ -437,8 +494,10 @@ export function resolveCaughtTransfer(
     state: resolvedState,
     costVBucks,
     correctionMagnitude,
+    releaseSpeed,
     deliveredTons: target.massTons,
     relativeCatchSpeed,
+    altitudeError,
     message: `Transfer complete: ${target.massTons.toFixed(0)} tons moved, -${costVBucks} vBucks.`,
   };
 }
@@ -469,12 +528,26 @@ function getTargetPosition(state: BeanstalkSystemState, target: TransferTarget):
   if (!targetBarbell) {
     throw new Error('Catch check needs target barbell.');
   }
+  if (target.sourceBarbellId === FLEET_CENTRAL_SOURCE_ID) {
+    return targetBarbell.center;
+  }
   return getEndpointState(targetBarbell, target.targetEndpoint).position;
 }
 
 export function didPassCatchAngle(previousError: number, currentError: number): boolean {
   const nearCatchLine = Math.abs(previousError) < Math.PI / 2 || Math.abs(currentError) < Math.PI / 2;
   return nearCatchLine && previousError * currentError <= 0;
+}
+
+export function signedAngularDelta(previousError: number, currentError: number): number {
+  let delta = currentError - previousError;
+  while (delta > Math.PI) {
+    delta -= Math.PI * 2;
+  }
+  while (delta < -Math.PI) {
+    delta += Math.PI * 2;
+  }
+  return delta;
 }
 
 export function detectInfrastructureCollision(state: BeanstalkSystemState): InfrastructureCollision | null {
@@ -520,33 +593,6 @@ function getTransferSourceRadius(state: BeanstalkSystemState, transfer: Transfer
   return sourceBarbell
     ? length(getEndpointState(sourceBarbell, transfer.sourceEndpoint).position)
     : Number.POSITIVE_INFINITY;
-}
-
-function isClearSurfaceLaunch(
-  state: BeanstalkSystemState,
-  targetBarbell: BeanstalkSystemState['barbells'][number],
-  targetEndpoint: EndpointKey,
-): boolean {
-  const source = createSurfaceLauncherState().position;
-  const target = getEndpointState(targetBarbell, targetEndpoint).position;
-  return !segmentPassesInsidePlanetFromSurface(source, target, state.planetRadius);
-}
-
-function segmentPassesInsidePlanetFromSurface(start: Vec2, end: Vec2, planetRadius: number): boolean {
-  const segment = sub(end, start);
-  const segmentLengthSq = dot(segment, segment);
-  if (segmentLengthSq <= 0) {
-    return false;
-  }
-  const t = Math.max(0, Math.min(1, dot(scale(start, -1), segment) / segmentLengthSq));
-  if (t <= 0.05) {
-    return false;
-  }
-  const closest = {
-    x: start.x + segment.x * t,
-    y: start.y + segment.y * t,
-  };
-  return length(closest) < planetRadius * 0.985;
 }
 
 function angularErrorBetween(payloadPosition: { x: number; y: number }, targetPosition: { x: number; y: number }): number {

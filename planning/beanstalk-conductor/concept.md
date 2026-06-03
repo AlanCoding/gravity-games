@@ -109,12 +109,14 @@ Done in the early prototype:
 - tutorial TODO placeholder with completion achievement wiring
 - source/mass-centered selection highlighting instead of whole-barbell highlighting
 - click-to-launch support for visible sources and occupied endpoints
-- visual source feed animations from `Civic Prime` and `Fleet Central`
+- prototype-only visual source feed animations from `Civic Prime` and `Fleet Central`
 - faster simulation pacing for normal operation and active payload transfers
 - larger playfield framing so `Fleet Central` and unstable orbits have more visible room
-- source feeds now load the first available endpoint and keep `Civic Prime` from feeding through the planet
+- source feeds now keep source selections stable and prevent occupied same-kind target slots
 - arrow-key menu navigation and single-panel backstory advancement with Enter/Space
 - play HUD moved into the canvas area with vBucks/selection on the left and Admiral Voss on the right
+- generated art integration for the planet, station, Admiral Voss portraits, and backstory panels
+- backstory panel images with console-style typewriter text
 
 Not done yet:
 
@@ -123,7 +125,8 @@ Not done yet:
 - polished front screen styling and final generated menu/backstory art integration
 - generated backstory art and final backstory viewer styling
 - real tutorial/exhibition mode
-- stronger first/last transfer handling and clearer source-feed visuals as playtesting exposes edge cases
+- physical source-origin transfers from `Civic Prime` and `Fleet Central`; current source feeds are diagnostic
+  placeholders and must become tangent-velocity orbital transfers
 - RK4 or other higher-order integration
 
 The next objective is playability polish around the live prototype: improve source/feed clarity, encode Admiral Voss
@@ -234,7 +237,9 @@ Money rules:
 - money is earned when upmass is delivered to `Fleet Central`
 - a failed delivery costs a penalty
 - downmass costs money immediately when it is released/generated from `Fleet Central`
-- bad downmass timing can add release-correction cost because the transfer window is not free
+- bad ordinary downmass transfer timing can add release-correction cost because the transfer window is not free
+- initial source-origin launches from `Civic Prime` and `Fleet Central` are explicit infrastructure exceptions: no
+  correction charge, no source recoil, and no source-origin catch penalty
 - ordinary intermediate upmass catches may have operational cost, but final `Fleet Central` delivery should not add
   unintended-position or unintended-velocity penalties once it is targetable
 - downmass and upmass must physically match, but downmass should cost less than upmass earns
@@ -306,12 +311,19 @@ physics work should upgrade the backend to RK4, preferably behind the same pure 
 economy rules are stable.
 
 There is an infinite upmass source at the stationary surface launch site. This can inject unlimited new upmasses into
-the system, whether or not that is a good idea. For early play testing, fresh dynamic masses should be 12-ton units so
-system degradation is easier to see.
+the system, whether or not that is a good idea. This source should not directly fill a barbell endpoint. It should launch
+a real active payload from the surface launcher with tangential velocity computed by the transfer solver, then the
+payload should travel under the same central gravity model as all other transfers. `Civic Prime` is static; surface
+rotation is not modeled. The source launch must be prograde, and a solver result that requires retrograde launch is an
+invalid launch window. For early play testing, fresh dynamic masses should be 12-ton units so system degradation is
+easier to see.
 
 There is a station above the top tether, `Fleet Central`, which provides infinite downmass.
 The balancing problem is the point: upmass and downmass physically need to match over time, but they create funny wobble
-and financial tradeoffs.
+and financial tradeoffs. Fleet Central downmass generation should likewise be a real active payload release from the
+station's circular-orbit state, with a tangential correction solved against the top-stage target endpoint. The correction
+may be positive or negative relative to Fleet Central's own velocity, but the resulting payload orbit must remain
+prograde.
 
 ## First playable shape
 
@@ -327,6 +339,9 @@ Minimum playable slice:
 - freeze new player actions while a transfer is in flight
 - solve the release correction with the backend transfer solver
 - animate the same simulated transfer that was solved
+- make source-origin launches from `Civic Prime` and `Fleet Central` use the same active-payload simulation as
+  barbell-origin transfers; do not use decorative source-feed interpolation, and do not charge correction or catch
+  penalties for these source-origin launches
 - resolve the transfer by moving fill from the source endpoint to the target endpoint
 - apply correction cost in `Delta-vBucks`
 - keep the first capture/resolution model simple, then replace it with radial capture gates once the visual loop is playable
@@ -338,6 +353,8 @@ Current prototype status:
 - the planet should eventually be replaced or upgraded with a real asset or more deliberate planet art
 - the surface space cannon should be visible because it explains the infinite upmass source
 - the UI needs continued debugging around timing, transfer readability, and catch/resolution reporting
+- source-origin launches are still not physically faithful: they use a prototype source-load flow and must be replaced
+  with solved tangential orbital transfers
 - achievements wiring should start with a demo achievement for launching any mass
 
 The early flow should be:

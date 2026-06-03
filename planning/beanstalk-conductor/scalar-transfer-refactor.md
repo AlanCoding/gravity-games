@@ -178,6 +178,139 @@ central gravity and therefore can rotate/wobble.
 
 The figure of merit is radial miss at the angular crossing.
 
+## Physical source-origin transfers
+
+The current prototype source-load behavior is not physically acceptable. `Civic Prime` and `Fleet Central` source loads
+must not use decorative feed paths or instant endpoint fills. They should be treated as ordinary one-active-payload
+transfers whose launch velocity is computed by the same scalar tangent-transfer machinery used for barbell transfers.
+
+The player-facing rule should remain simple:
+
+- the source is selectable only when its intended destination endpoint has an open slot for that mass kind
+- pressing Enter/Space commits the launch at the current time
+- if no usable prograde scalar root exists, the source remains selectable and Admiral Voss reports the failed launch
+  window
+- while the source-origin payload is in flight, no other player action is accepted
+- the visible dot is always the simulated payload position, never an interpolation path
+- catch/resolution uses the same angular-crossing and endpoint-attachment logic as normal transfers
+- these two source-origin launches are special infrastructure cases: no correction charge, no source recoil, and no
+  catch penalty should be applied
+
+### Civic Prime upmass launch
+
+`Civic Prime` is a fixed surface source, not a barbell. The launcher source state should provide:
+
+- position: the surface launcher position returned by `createSurfaceLauncherState`
+- velocity: zero; the planet is static and surface rotation is not modeled
+- tangent direction: the prograde tangent at the launcher radius, perpendicular to the local radial vector
+- destination: the current lower-radial endpoint of the first barbell
+- figure of merit: radial miss at the destination angular crossing, matching normal barbell-to-barbell transfers
+
+The solved launch velocity should be:
+
+```text
+payloadInitialVelocity = source.velocity + sourceTangentDirection * scalarCorrection
+```
+
+For the surface launcher, `scalarCorrection` is effectively the mass-driver muzzle velocity along the local horizontal
+tangent. The correction must be prograde. If the solver only finds a retrograde solution or cannot bracket a useful
+prograde scalar root, that launch window is a bust and the game should report the failed window instead of firing.
+
+The surface launcher is infrastructure attached to the planet. For the first physical-source implementation, it should
+not apply recoil to `Civic Prime`; the planet is treated as an external massive body. The source-origin correction also
+should not cost vBucks. This is an explicit exception to the normal transfer-cost rules.
+
+### Fleet Central downmass launch
+
+`Fleet Central` is a fixed circular-orbit source. The downmass source state should provide:
+
+- position and velocity from `getFleetCentralState`
+- tangent direction from the station's circular-orbit velocity direction
+- destination: the current higher-radial endpoint of the last barbell
+- figure of merit: radial miss at the destination angular crossing
+
+The solved launch velocity should be:
+
+```text
+payloadInitialVelocity = fleetCentral.velocity + fleetTangentDirection * scalarCorrection
+```
+
+This makes Fleet Central downmass generation a real orbital release instead of an endpoint fill. Fleet Central already
+has orbital velocity, so the scalar correction may be positive or negative relative to the station's velocity direction.
+The resulting payload velocity must still be prograde around the planet. If the solved launch would make the payload
+retrograde, the launch window is invalid.
+
+This source-origin release should not charge a correction cost or catch penalty. The revenue/cost flow for this case is
+already tied to downmass generation, so adding a separate release penalty is unnecessary complexity for the first
+implementation. The payload must still visibly travel under the central gravity model and catch by the normal
+angular-crossing mechanism.
+
+Fleet Central is effectively massive and prescribed-orbit. As with Civic Prime, the first implementation should not
+apply recoil to the station. If recoil or station stationkeeping becomes relevant later, it should be modeled as money
+or dialog rather than perturbing the fixed station orbit.
+
+### Source abstraction
+
+The solver should grow a source interface parallel to the destination interface. A possible shape is:
+
+```ts
+type TransferSource =
+  | { kind: 'barbell-end'; barbell: BarbellState; endpoint: EndpointKey }
+  | { kind: 'fixed-surface-launcher'; position: Vec2; velocity: Vec2; tangentDirection: Vec2 }
+  | { kind: 'fixed-orbit-station'; position: Vec2; velocity: Vec2; tangentDirection: Vec2 };
+```
+
+The exact TypeScript shape can change, but the core requirement is that `createTransferLaunch` and
+`solveTransferCorrection` no longer assume every source has a source barbell. They should ask the source for initial
+position, initial velocity, tangent direction, and whether recoil should be applied.
+
+### Implementation sequence
+
+1. Extend `TransferTarget` or replace it with a transfer command object that can represent source kinds as well as
+   destination kinds.
+2. Add helper functions for source state:
+   - `getTransferSourceState(state, target)`
+   - `getSurfaceLauncherTransferSource(state)`
+   - `getFleetCentralTransferSource(state)`
+3. Refactor the scalar solver setup to use source state instead of directly looking up a source barbell endpoint.
+4. Keep barbell endpoint releases behavior-preserving by applying the existing detach/recoil path only for
+   `barbell-end` sources.
+5. For fixed source launches, create the active payload directly from source state with the solved tangent correction.
+6. Reject any launch root whose final payload velocity is retrograde around the planet. For `Civic Prime`, the scalar
+   correction itself must also be prograde.
+7. Convert `source-load` opportunities from `durationSeconds: 0` decorative feeds to normal active transfers with a
+   solver duration comparable to adjacent-stage transfers.
+8. Remove `activeSourceLoad`, `drawSourceLoadPayload`, and any Bezier/feed animation once the real source transfers are
+   implemented.
+9. Keep source occupancy rules strict:
+   - Civic Prime only targets the current lower-radial first-stage endpoint
+   - Fleet Central only targets the current higher-radial last-stage endpoint
+   - a source opportunity is not selectable if that target endpoint already has the same mass kind
+10. Add regression tests:
+   - Civic Prime launch creates an active payload and does not instantly fill the endpoint
+   - Civic Prime launch has zero source velocity, prograde tangent correction, no recoil, and no correction cost
+   - Fleet Central downmass launch creates an active payload and keeps the resulting payload velocity prograde
+   - Fleet Central downmass launch applies no source recoil, no correction cost, and no catch penalty
+   - the active source-origin payload follows `stepSystem` positions between launch and catch
+   - no source-origin transfer is offered when the target slot is occupied
+   - no decorative source-load path remains in the game renderer
+11. Validate with `npm run test` and `npm run build`, then play the first upmass and first downmass source-origin
+    launches to check that the dot follows a plausible orbital arc.
+
+### Settled source-origin decisions
+
+- `Civic Prime` is static. Do not model planet rotation.
+- `Civic Prime` launches only prograde. A retrograde scalar root is invalid.
+- `Fleet Central` launches must result in prograde orbital motion. Its correction may be positive or negative relative
+  to the station velocity because the station already has a large prograde circular velocity.
+- Apply the same prograde-result guard to ordinary barbell transfers as a future cleanup if retrograde transfer roots
+  become possible there.
+- Do not charge correction cost for the two source-origin launches.
+- Do not apply recoil to `Civic Prime` or `Fleet Central` for source-origin launches.
+- Do not add a source-origin catch penalty for these cases in the first implementation.
+- A source-origin miss is not an intended state. The solver should simulate ahead and root-find the required release
+  velocity; if that solve is not available, do not launch.
+
 ## Final upmass transfer
 
 `Fleet Central` is a massive fixed-orbit destination above the top tether.
@@ -222,7 +355,8 @@ losses, but economically it is trash handling.
 Downmass is treated as trash for the economy. It does not earn money.
 
 However, downmass must actually be disposed of onto the planet. If it misses the planet and remains in orbit, that is
-not valid disposal.
+not valid disposal. This is not a normal endpoint catch: the payload has to enter a disposal orbit whose perigee
+intersects `Civic Prime`.
 
 The final downmass special case should use a perigee figure of merit:
 

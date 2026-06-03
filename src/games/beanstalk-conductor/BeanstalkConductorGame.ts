@@ -18,11 +18,13 @@ import {
   createTransferLaunch,
   detectInfrastructureCollision,
   didPassCatchAngle,
+  estimateTransferTiming,
   getAvailableTransfers,
   getTransferAvailabilityIssue,
   getAngularCatchError,
   resolveTransfer,
   resolveCaughtTransfer,
+  signedAngularDelta,
   TransferSolveFailure,
   type TransferOpportunity,
 } from './gameLogic';
@@ -32,8 +34,16 @@ type BeanstalkGameOptions = {
   container: HTMLElement;
   statsDisplay: HTMLElement | null;
   selectionDisplay: HTMLElement | null;
+  timingDisplay: HTMLElement | null;
   admiralDisplay: HTMLElement | null;
   admiralPortraitDisplay: HTMLImageElement | null;
+  transferBannerDisplay: HTMLElement | null;
+  resetButton: HTMLButtonElement | null;
+  giveUpButton: HTMLButtonElement | null;
+  giveUpDialog: HTMLElement | null;
+  confirmGiveUpButton: HTMLButtonElement | null;
+  cancelGiveUpButton: HTMLButtonElement | null;
+  speedButtons: HTMLButtonElement[];
   achievementNotifier?: (message: string) => void;
   achievementUnlocker?: (id: BeanstalkAchievementId) => void;
 };
@@ -42,22 +52,21 @@ type ActiveTransfer = {
   target: TransferTarget;
   payload: PayloadState;
   correctionMagnitude: number;
+  releaseSpeed: number;
   previousAngularError: number;
+  catchArmed: boolean;
+  angularTravel: number;
+  minCatchSeconds: number;
   elapsedSeconds: number;
-};
-
-type ActiveSourceLoad = {
-  target: TransferOpportunity;
-  elapsedSeconds: number;
-  durationSeconds: number;
 };
 
 const NORMAL_TIME_SCALE = 2;
-const TRANSFER_TIME_SCALE = 4;
+const TRANSFER_TIME_SCALE = NORMAL_TIME_SCALE;
 const MAX_SIM_STEP_SECONDS = 0.05;
-const SOURCE_LOAD_SECONDS = 1.1;
 const VIEW_WORLD_DIAMETER = 860;
 const CIVIC_PRIME_SOURCE_ID = 'civic-prime-space-gun';
+const CATCH_ARM_ANGLE_RAD = 0.015;
+const MAX_TRANSFER_ANGULAR_TRAVEL_RAD = Math.PI * 2;
 
 export class BeanstalkConductorGame {
   private readonly canvas: HTMLCanvasElement;
@@ -66,8 +75,16 @@ export class BeanstalkConductorGame {
   private readonly fleetCentralImage = new Image();
   private readonly statsDisplay: HTMLElement | null;
   private readonly selectionDisplay: HTMLElement | null;
+  private readonly timingDisplay: HTMLElement | null;
   private readonly admiralDisplay: HTMLElement | null;
   private readonly admiralPortraitDisplay: HTMLImageElement | null;
+  private readonly transferBannerDisplay: HTMLElement | null;
+  private readonly resetButton: HTMLButtonElement | null;
+  private readonly giveUpButton: HTMLButtonElement | null;
+  private readonly giveUpDialog: HTMLElement | null;
+  private readonly confirmGiveUpButton: HTMLButtonElement | null;
+  private readonly cancelGiveUpButton: HTMLButtonElement | null;
+  private readonly speedButtons: HTMLButtonElement[];
   private readonly achievementNotifier?: (message: string) => void;
   private readonly achievementUnlocker?: (id: BeanstalkAchievementId) => void;
   private state: BeanstalkSystemState = createInitialBeanstalkSystem();
@@ -77,7 +94,7 @@ export class BeanstalkConductorGame {
   private animationFrame: number | null = null;
   private lastTimestamp = 0;
   private activeTransfer: ActiveTransfer | null = null;
-  private activeSourceLoad: ActiveSourceLoad | null = null;
+  private speedMultiplier = 1;
   private hasAwardedFirstLaunch = false;
   private gameOver = false;
   private message = 'Admiral Voss: Public Beanstalk Works is cleared for first transfer.';
@@ -93,13 +110,29 @@ export class BeanstalkConductorGame {
     this.fleetCentralImage.src = fleetCentralUrl;
     this.statsDisplay = options.statsDisplay;
     this.selectionDisplay = options.selectionDisplay;
+    this.timingDisplay = options.timingDisplay;
     this.admiralDisplay = options.admiralDisplay;
     this.admiralPortraitDisplay = options.admiralPortraitDisplay;
+    this.transferBannerDisplay = options.transferBannerDisplay;
+    this.resetButton = options.resetButton;
+    this.giveUpButton = options.giveUpButton;
+    this.giveUpDialog = options.giveUpDialog;
+    this.confirmGiveUpButton = options.confirmGiveUpButton;
+    this.cancelGiveUpButton = options.cancelGiveUpButton;
+    this.speedButtons = options.speedButtons;
     this.achievementNotifier = options.achievementNotifier;
     this.achievementUnlocker = options.achievementUnlocker;
     options.container.replaceChildren(this.canvas);
-    options.container.addEventListener('keydown', this.handleKeyDown);
+    document.addEventListener('keydown', this.handleKeyDown);
     this.canvas.addEventListener('click', this.handleCanvasClick);
+    this.resetButton?.addEventListener('click', this.handleResetClick);
+    this.giveUpButton?.addEventListener('click', this.showGiveUpDialog);
+    this.confirmGiveUpButton?.addEventListener('click', this.handleConfirmGiveUp);
+    this.cancelGiveUpButton?.addEventListener('click', this.hideGiveUpDialog);
+    this.speedButtons.forEach(button => {
+      button.addEventListener('click', this.handleSpeedButtonClick);
+    });
+    this.updateSpeedButtons();
     this.resize();
     window.addEventListener('resize', this.resize);
   }
@@ -115,9 +148,58 @@ export class BeanstalkConductorGame {
       this.animationFrame = null;
     }
     window.removeEventListener('resize', this.resize);
-    this.canvas.parentElement?.removeEventListener('keydown', this.handleKeyDown);
+    document.removeEventListener('keydown', this.handleKeyDown);
     this.canvas.removeEventListener('click', this.handleCanvasClick);
+    this.resetButton?.removeEventListener('click', this.handleResetClick);
+    this.giveUpButton?.removeEventListener('click', this.showGiveUpDialog);
+    this.confirmGiveUpButton?.removeEventListener('click', this.handleConfirmGiveUp);
+    this.cancelGiveUpButton?.removeEventListener('click', this.hideGiveUpDialog);
+    this.speedButtons.forEach(button => {
+      button.removeEventListener('click', this.handleSpeedButtonClick);
+    });
   }
+
+  private readonly handleSpeedButtonClick = (event: MouseEvent): void => {
+    const button = event.currentTarget as HTMLButtonElement | null;
+    const speed = Number(button?.dataset.beanstalkSpeed);
+    if (![1, 2, 4, 8, 16, 32].includes(speed)) {
+      return;
+    }
+    this.speedMultiplier = speed;
+    this.updateSpeedButtons();
+  };
+
+  private readonly handleResetClick = (): void => {
+    this.state = createInitialBeanstalkSystem();
+    this.moneyVBucks = 5000;
+    this.selectedIndex = 0;
+    this.selectedTransferKey = null;
+    this.activeTransfer = null;
+    this.hasAwardedFirstLaunch = false;
+    this.gameOver = false;
+    this.message = 'Admiral Voss: Public Beanstalk Works is cleared for first transfer.';
+    this.hideGiveUpDialog();
+    this.updateDisplays();
+  };
+
+  private readonly showGiveUpDialog = (): void => {
+    if (!this.giveUpDialog) {
+      window.location.hash = '#beanstalk-conductor';
+      return;
+    }
+    this.giveUpDialog.hidden = false;
+    this.confirmGiveUpButton?.focus();
+  };
+
+  private readonly hideGiveUpDialog = (): void => {
+    if (this.giveUpDialog) {
+      this.giveUpDialog.hidden = true;
+    }
+  };
+
+  private readonly handleConfirmGiveUp = (): void => {
+    window.location.hash = '#beanstalk-conductor';
+  };
 
   private readonly resize = (): void => {
     const parent = this.canvas.parentElement;
@@ -135,9 +217,31 @@ export class BeanstalkConductorGame {
   };
 
   private readonly handleKeyDown = (event: KeyboardEvent): void => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      if (this.giveUpDialog && !this.giveUpDialog.hidden) {
+        this.hideGiveUpDialog();
+      } else {
+        this.showGiveUpDialog();
+      }
+      return;
+    }
+    if (this.giveUpDialog && !this.giveUpDialog.hidden) {
+      return;
+    }
+    if (event.key.toLowerCase() === 'w') {
+      event.preventDefault();
+      this.adjustSpeed(1);
+      return;
+    }
+    if (event.key.toLowerCase() === 's') {
+      event.preventDefault();
+      this.adjustSpeed(-1);
+      return;
+    }
     const transfers = getAvailableTransfers(this.state);
     this.reconcileSelectedTransfer(transfers);
-    if (this.activeTransfer || this.activeSourceLoad || this.gameOver) {
+    if (this.activeTransfer || this.gameOver) {
       return;
     }
     if (event.key === 'ArrowDown' || event.key === 'ArrowRight') {
@@ -157,18 +261,8 @@ export class BeanstalkConductorGame {
   };
 
   private readonly handleCanvasClick = (event: MouseEvent): void => {
-    if (this.activeTransfer || this.activeSourceLoad || this.gameOver) {
-      return;
-    }
-    const transfers = getAvailableTransfers(this.state);
-    this.reconcileSelectedTransfer(transfers);
-    const clicked = this.transferAtCanvasPoint(event, transfers);
-    if (!clicked) {
-      return;
-    }
-    this.selectedIndex = clicked.index;
-    this.storeSelectedTransfer(transfers);
-    this.launchSelectedTransfer(transfers);
+    event.preventDefault();
+    this.canvas.parentElement?.focus();
   };
 
   private launchSelectedTransfer(transfers: TransferOpportunity[]): void {
@@ -184,15 +278,6 @@ export class BeanstalkConductorGame {
       return;
     }
     this.awardFirstLaunch();
-    if (target.mode === 'source-load') {
-      this.activeSourceLoad = {
-        target,
-        elapsedSeconds: 0,
-        durationSeconds: SOURCE_LOAD_SECONDS,
-      };
-      this.message = `Admiral Voss: ${target.label}. Feed transfer in progress.`;
-      return;
-    }
     if (target.mode === 'cross-tether') {
       const resolved = resolveTransfer(this.state, target);
       this.state = resolved.state;
@@ -206,7 +291,7 @@ export class BeanstalkConductorGame {
       launch = createTransferLaunch(this.state, target);
     } catch (error) {
       if (error instanceof TransferSolveFailure) {
-        this.message = 'Admiral Voss: No usable release window. I am told the engineers have theories.';
+        this.message = `Admiral Voss: No usable release window. ${formatSolveFailure(error)} ${formatTimingEstimateForFailure(this.state, target)}`;
         return;
       }
       throw error;
@@ -217,7 +302,11 @@ export class BeanstalkConductorGame {
       target,
       payload,
       correctionMagnitude: launch.correctionMagnitude,
+      releaseSpeed: launch.releaseSpeed,
       previousAngularError: launch.previousAngularError,
+      catchArmed: launch.catchArmed,
+      angularTravel: launch.angularTravel,
+      minCatchSeconds: launch.minCatchSeconds,
       elapsedSeconds: 0,
     };
     this.message = `Admiral Voss: ${target.label}. Correction ${launch.correctionMagnitude.toFixed(2)} m/s.`;
@@ -236,35 +325,12 @@ export class BeanstalkConductorGame {
       return;
     }
 
-    if (this.activeSourceLoad) {
-      this.advanceSourceLoad(dt);
-      return;
-    }
-
     if (this.activeTransfer) {
       this.advanceActiveTransfer(dt);
       return;
     }
 
-    this.state = this.stepState(dt * NORMAL_TIME_SCALE);
-    this.checkInfrastructureCollision();
-  }
-
-  private advanceSourceLoad(dt: number): void {
-    if (!this.activeSourceLoad) {
-      return;
-    }
-    this.state = this.stepState(dt * NORMAL_TIME_SCALE);
-    this.activeSourceLoad.elapsedSeconds += dt;
-    if (this.activeSourceLoad.elapsedSeconds >= this.activeSourceLoad.durationSeconds) {
-      const completedTarget = this.activeSourceLoad.target;
-      const resolved = resolveTransfer(this.state, completedTarget);
-      this.state = resolved.state;
-      this.moneyVBucks -= resolved.costVBucks;
-      this.message = `Admiral Voss: ${resolved.message}`;
-      this.activeSourceLoad = null;
-      this.selectOpportunityForMass(completedTarget.targetBarbellId, completedTarget.targetEndpoint, completedTarget.kind);
-    }
+    this.state = this.stepState(dt * NORMAL_TIME_SCALE * this.speedMultiplier);
     this.checkInfrastructureCollision();
   }
 
@@ -272,7 +338,7 @@ export class BeanstalkConductorGame {
     if (!this.activeTransfer) {
       return;
     }
-    let remaining = dt * TRANSFER_TIME_SCALE;
+    let remaining = dt * TRANSFER_TIME_SCALE * this.speedMultiplier;
     while (this.activeTransfer && remaining > 0) {
       const step = Math.min(MAX_SIM_STEP_SECONDS, remaining);
       this.state = {
@@ -282,14 +348,28 @@ export class BeanstalkConductorGame {
       this.state = stepSystem(this.state, step);
       const payload = this.state.payloads[0];
       const currentAngularError = getAngularCatchError(this.state, this.activeTransfer.target);
-      const caught = this.activeTransfer.elapsedSeconds > 0.15
-        && (this.activeTransfer.target.destinationKind === 'planet-disposal'
-          ? this.activeTransfer.previousAngularError > 0 && currentAngularError <= 0
-          : didPassCatchAngle(this.activeTransfer.previousAngularError, currentAngularError));
+      const angularTravel: number = this.activeTransfer.target.destinationKind === 'planet-disposal'
+        ? this.activeTransfer.angularTravel
+        : this.activeTransfer.angularTravel
+          + Math.abs(signedAngularDelta(this.activeTransfer.previousAngularError, currentAngularError));
+      const passedCatchAngle = didPassCatchAngle(this.activeTransfer.previousAngularError, currentAngularError);
+      const caught = this.activeTransfer.target.destinationKind === 'planet-disposal'
+        ? this.activeTransfer.previousAngularError > 0 && currentAngularError <= 0
+        : this.activeTransfer.elapsedSeconds >= this.activeTransfer.minCatchSeconds
+          && this.activeTransfer.catchArmed
+          && passedCatchAngle;
+      const catchArmed: boolean = this.activeTransfer.catchArmed
+        || this.activeTransfer.target.destinationKind === 'planet-disposal'
+        || (
+          this.activeTransfer.elapsedSeconds > 0.15
+          && Math.abs(currentAngularError) >= CATCH_ARM_ANGLE_RAD
+        );
       this.activeTransfer = {
         ...this.activeTransfer,
         payload,
         previousAngularError: currentAngularError,
+        catchArmed,
+        angularTravel,
         elapsedSeconds: this.activeTransfer.elapsedSeconds + step,
       };
       if (caught) {
@@ -297,10 +377,11 @@ export class BeanstalkConductorGame {
           this.state,
           this.activeTransfer.target,
           this.activeTransfer.correctionMagnitude,
+          this.activeTransfer.releaseSpeed,
         );
         this.state = resolved.state;
         this.moneyVBucks -= resolved.costVBucks;
-        this.message = `Admiral Voss: ${resolved.message} Catch speed ${resolved.relativeCatchSpeed.toFixed(2)} m/s.`;
+        this.message = `Admiral Voss: ${resolved.message} Release speed ${resolved.releaseSpeed.toFixed(2)} m/s. Catch speed ${resolved.relativeCatchSpeed.toFixed(2)} m/s. Altitude error ${resolved.altitudeError.toFixed(2)}.`;
         const caughtTarget = this.activeTransfer.target;
         this.activeTransfer = null;
         if (caughtTarget.destinationKind) {
@@ -309,6 +390,18 @@ export class BeanstalkConductorGame {
         } else {
           this.selectOpportunityForMass(caughtTarget.targetBarbellId, caughtTarget.targetEndpoint, caughtTarget.kind);
         }
+      }
+      if (
+        this.activeTransfer
+        && this.activeTransfer.target.destinationKind !== 'planet-disposal'
+        && this.activeTransfer.angularTravel >= MAX_TRANSFER_ANGULAR_TRAVEL_RAD
+      ) {
+        this.state = {
+          ...this.state,
+          payloads: [],
+        };
+        this.message = 'Admiral Voss: Transfer missed the first angular crossing. Payload tracking aborted before another orbit.';
+        this.activeTransfer = null;
       }
       this.checkInfrastructureCollision();
       remaining -= step;
@@ -341,7 +434,6 @@ export class BeanstalkConductorGame {
     this.drawSourceMasses(ctx, center, scale);
     this.drawBarbells(ctx, center, scale);
     this.drawPayloads(ctx, center, scale);
-    this.drawSourceLoadPayload(ctx, center, scale);
     if (this.gameOver) {
       this.drawGameOver(ctx, width, height);
     }
@@ -355,7 +447,6 @@ export class BeanstalkConductorGame {
     }
     this.gameOver = true;
     this.activeTransfer = null;
-    this.activeSourceLoad = null;
     if (collision.kind === 'planet') {
       this.message = `Admiral Voss: ${collision.barbellId} has intersected Civic Prime. Run ended.`;
       this.achievementUnlocker?.('tether-hit-civic-prime');
@@ -391,8 +482,8 @@ export class BeanstalkConductorGame {
   private drawSurfaceCannon(ctx: CanvasRenderingContext2D, scale: number): void {
     const radius = this.state.planetRadius * scale;
     ctx.save();
-    ctx.rotate(0);
-    ctx.translate(radius - 7 * scale, 0);
+    ctx.rotate(-75 * (Math.PI / 180));
+    ctx.translate(radius - 5 * scale, 0);
     ctx.fillStyle = '#eac460';
     ctx.fillRect(-5 * scale, -4 * scale, 13 * scale, 8 * scale);
     ctx.fillStyle = '#d7e1de';
@@ -438,7 +529,7 @@ export class BeanstalkConductorGame {
   private drawBarbells(ctx: CanvasRenderingContext2D, center: Vec2, scale: number): void {
     const transfers = getAvailableTransfers(this.state);
     this.reconcileSelectedTransfer(transfers);
-    const selected = transfers[this.selectedIndex];
+    const selected = this.activeTransfer ? undefined : transfers[this.selectedIndex];
     for (const barbell of this.state.barbells) {
       const inner = getEndpointState(barbell, 'inner');
       const outer = getEndpointState(barbell, 'outer');
@@ -452,8 +543,8 @@ export class BeanstalkConductorGame {
       ctx.stroke();
       this.drawEndpoint(ctx, innerPoint, inner.fill.upmassTons, inner.fill.downmassTons);
       this.drawEndpoint(ctx, outerPoint, outer.fill.upmassTons, outer.fill.downmassTons);
-      this.drawSelectionMarker(ctx, selected, barbell.id, 'inner', innerPoint);
-      this.drawSelectionMarker(ctx, selected, barbell.id, 'outer', outerPoint);
+      this.drawSelectionMarker(ctx, selected, barbell.id, 'inner', innerPoint, inner.fill.upmassTons, inner.fill.downmassTons);
+      this.drawSelectionMarker(ctx, selected, barbell.id, 'outer', outerPoint, outer.fill.upmassTons, outer.fill.downmassTons);
     }
     this.drawSourceSelection(ctx, selected, center, scale);
   }
@@ -494,39 +585,29 @@ export class BeanstalkConductorGame {
 
   private drawSourceMasses(ctx: CanvasRenderingContext2D, center: Vec2, scale: number): void {
     const launcher = worldToCanvas(this.surfaceLauncherPosition(), center, scale);
-    ctx.beginPath();
-    ctx.arc(launcher.x + 18, launcher.y - 12, 7, 0, Math.PI * 2);
-    ctx.fillStyle = '#7dd3fc';
-    ctx.fill();
+    if (!this.isActiveSourceLaunch(CIVIC_PRIME_SOURCE_ID, 'upmass')) {
+      ctx.beginPath();
+      ctx.arc(launcher.x + 5, launcher.y - 3, 7, 0, Math.PI * 2);
+      ctx.fillStyle = '#7dd3fc';
+      ctx.fill();
+    }
 
     const station = getFleetCentralState({
       timeSeconds: this.state.timeSeconds,
       gravitationalParameter: this.state.gravitationalParameter,
     });
     const fleet = worldToCanvas(station.position, center, scale);
-    ctx.beginPath();
-    ctx.arc(fleet.x + 22, fleet.y + 16, 7, 0, Math.PI * 2);
-    ctx.fillStyle = '#f59e0b';
-    ctx.fill();
+    if (!this.isActiveSourceLaunch('fleet-central-downmass-source', 'downmass')) {
+      ctx.beginPath();
+      ctx.arc(fleet.x + 22, fleet.y + 16, 7, 0, Math.PI * 2);
+      ctx.fillStyle = '#f59e0b';
+      ctx.fill();
+    }
   }
 
-  private drawSourceLoadPayload(ctx: CanvasRenderingContext2D, center: Vec2, scale: number): void {
-    if (!this.activeSourceLoad) {
-      return;
-    }
-    const progress = Math.min(1, this.activeSourceLoad.elapsedSeconds / this.activeSourceLoad.durationSeconds);
-    const source = this.sourcePositionFor(this.activeSourceLoad.target);
-    const target = this.targetEndpointPositionFor(this.activeSourceLoad.target);
-    if (!target) {
-      return;
-    }
-    const eased = progress * progress * (3 - 2 * progress);
-    const position = horizontalLaunchPath(source, target, eased);
-    const point = worldToCanvas(position, center, scale);
-    ctx.beginPath();
-    ctx.arc(point.x, point.y, 7, 0, Math.PI * 2);
-    ctx.fillStyle = this.activeSourceLoad.target.kind === 'upmass' ? '#7dd3fc' : '#f59e0b';
-    ctx.fill();
+  private isActiveSourceLaunch(sourceBarbellId: string, kind: 'upmass' | 'downmass'): boolean {
+    return this.activeTransfer?.target.sourceBarbellId === sourceBarbellId
+      && this.activeTransfer.target.kind === kind;
   }
 
   private drawSelectionMarker(
@@ -535,6 +616,8 @@ export class BeanstalkConductorGame {
     barbellId: string,
     endpoint: 'inner' | 'outer',
     point: Vec2,
+    upmassTons: number,
+    downmassTons: number,
   ): void {
     if (!selected || selected.mode === 'source-load') {
       return;
@@ -542,13 +625,34 @@ export class BeanstalkConductorGame {
     if (selected.sourceBarbellId !== barbellId || selected.sourceEndpoint !== endpoint) {
       return;
     }
+    const markerPoint = this.massMarkerPoint(point, selected.kind, upmassTons, downmassTons);
     ctx.save();
-    ctx.strokeStyle = selected.kind === 'upmass' ? '#7dd3fc' : '#f59e0b';
-    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = '#050709';
+    ctx.lineWidth = 6;
     ctx.beginPath();
-    ctx.arc(point.x, point.y, 18, 0, Math.PI * 2);
+    ctx.arc(markerPoint.x, markerPoint.y, 13, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = selected.kind === 'upmass' ? '#7dd3fc' : '#f59e0b';
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.arc(markerPoint.x, markerPoint.y, 13, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
+  }
+
+  private massMarkerPoint(
+    point: Vec2,
+    kind: 'upmass' | 'downmass',
+    upmassTons: number,
+    downmassTons: number,
+  ): Vec2 {
+    if (kind === 'upmass' && upmassTons > 0) {
+      return { x: point.x - 7, y: point.y - 7 };
+    }
+    if (kind === 'downmass' && downmassTons > 0) {
+      return { x: point.x + 7, y: point.y + 7 };
+    }
+    return point;
   }
 
   private drawSourceSelection(
@@ -560,14 +664,27 @@ export class BeanstalkConductorGame {
     if (!selected || selected.mode !== 'source-load') {
       return;
     }
-    const source = worldToCanvas(this.sourcePositionFor(selected), center, scale);
+    const source = worldToCanvas(this.sourceMassPositionFor(selected), center, scale);
     ctx.save();
-    ctx.strokeStyle = selected.kind === 'upmass' ? '#7dd3fc' : '#f59e0b';
-    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = '#050709';
+    ctx.lineWidth = 6;
     ctx.beginPath();
-    ctx.arc(source.x, source.y, 24, 0, Math.PI * 2);
+    ctx.arc(source.x, source.y, 14, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = selected.kind === 'upmass' ? '#7dd3fc' : '#f59e0b';
+    ctx.lineWidth = 3.5;
+    ctx.beginPath();
+    ctx.arc(source.x, source.y, 14, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
+  }
+
+  private sourceMassPositionFor(target: TransferOpportunity): Vec2 {
+    const source = this.sourcePositionFor(target);
+    if (target.sourceBarbellId === CIVIC_PRIME_SOURCE_ID) {
+      return { x: source.x + 2, y: source.y + 1.2 };
+    }
+    return { x: source.x + 22, y: source.y + 16 };
   }
 
   private sourcePositionFor(target: TransferOpportunity): Vec2 {
@@ -580,47 +697,8 @@ export class BeanstalkConductorGame {
     }).position;
   }
 
-  private targetEndpointPositionFor(target: TransferOpportunity): Vec2 | null {
-    const barbell = this.state.barbells.find(candidate => candidate.id === target.targetBarbellId);
-    return barbell ? getEndpointState(barbell, target.targetEndpoint).position : null;
-  }
-
-  private transferSourcePosition(target: TransferOpportunity): Vec2 | null {
-    if (target.mode === 'source-load') {
-      return this.sourcePositionFor(target);
-    }
-    const barbell = this.state.barbells.find(candidate => candidate.id === target.sourceBarbellId);
-    return barbell ? getEndpointState(barbell, target.sourceEndpoint).position : null;
-  }
-
   private surfaceLauncherPosition(): Vec2 {
     return createSurfaceLauncherState().position;
-  }
-
-  private transferAtCanvasPoint(
-    event: MouseEvent,
-    transfers: TransferOpportunity[],
-  ): { index: number; distancePx: number } | null {
-    const rect = this.canvas.getBoundingClientRect();
-    const point = {
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top,
-    };
-    const scale = Math.min(this.canvas.clientWidth, this.canvas.clientHeight) / VIEW_WORLD_DIAMETER;
-    const center = { x: this.canvas.clientWidth / 2, y: this.canvas.clientHeight / 2 };
-    let best: { index: number; distancePx: number } | null = null;
-    for (let index = 0; index < transfers.length; index += 1) {
-      const sourcePosition = this.transferSourcePosition(transfers[index]);
-      if (!sourcePosition) {
-        continue;
-      }
-      const screen = worldToCanvas(sourcePosition, center, scale);
-      const distancePx = Math.hypot(point.x - screen.x, point.y - screen.y);
-      if (distancePx <= 34 && (!best || distancePx < best.distancePx)) {
-        best = { index, distancePx };
-      }
-    }
-    return best;
   }
 
   private selectOpportunityForMass(
@@ -656,19 +734,26 @@ export class BeanstalkConductorGame {
     this.reconcileSelectedTransfer(transfers);
     const selected = transfers[this.selectedIndex];
     if (this.statsDisplay) {
-      this.statsDisplay.textContent = `${this.moneyVBucks} vBucks | t=${this.state.timeSeconds.toFixed(1)} s`;
+      this.statsDisplay.textContent = [
+        `Money: ${this.moneyVBucks} vBucks`,
+        `Time: t=${this.state.timeSeconds.toFixed(1)} s`,
+      ].join('\n');
     }
     if (this.selectionDisplay) {
       this.selectionDisplay.textContent = this.activeTransfer
-        ? `transfer in progress: ${this.activeTransfer.target.kind}`
-        : this.activeSourceLoad
-          ? `source feed in progress: ${this.activeSourceLoad.target.kind}`
+        ? `Selection: paused`
         : selected
-          ? `${selected.label} | ${selected.massTons.toFixed(0)} tons`
-          : 'no legal transfer';
+          ? `Selection: ${selected.label} | ${selected.massTons.toFixed(0)} tons`
+          : 'Selection: no legal transfer';
+    }
+    if (this.timingDisplay) {
+      this.updateTimingDisplay(selected);
+    }
+    if (this.transferBannerDisplay) {
+      this.transferBannerDisplay.hidden = !this.activeTransfer;
     }
     if (this.admiralDisplay) {
-      this.admiralDisplay.textContent = this.message;
+      this.admiralDisplay.textContent = this.message.replace(/^Admiral Voss:\s*/, '');
     }
     if (this.admiralPortraitDisplay) {
       const portraitUrl = this.getAdmiralPortraitUrl();
@@ -676,6 +761,30 @@ export class BeanstalkConductorGame {
         this.admiralPortraitDisplay.src = portraitUrl;
       }
     }
+  }
+
+  private updateTimingDisplay(selected: TransferOpportunity | undefined): void {
+    if (!this.timingDisplay) {
+      return;
+    }
+    if (this.activeTransfer || !selected) {
+      this.timingDisplay.textContent = 'Timing: --';
+      this.timingDisplay.style.setProperty('--beanstalk-timing-quality', '0');
+      this.timingDisplay.classList.add('beanstalk-timing-unavailable');
+      return;
+    }
+    const estimate = estimateTransferTiming(this.state, selected);
+    if (!estimate?.supported) {
+      this.timingDisplay.textContent = 'Timing: --';
+      this.timingDisplay.style.setProperty('--beanstalk-timing-quality', '0');
+      this.timingDisplay.classList.add('beanstalk-timing-unavailable');
+      return;
+    }
+    this.timingDisplay.classList.remove('beanstalk-timing-unavailable');
+    this.timingDisplay.style.setProperty('--beanstalk-timing-quality', estimate.quality.toFixed(3));
+    this.timingDisplay.textContent = estimate.quality > 0
+      ? `Timing: ${(estimate.quality * 100).toFixed(0)}% | ideal in ${estimate.nextIdealReleaseSeconds.toFixed(1)} s`
+      : `Timing: X | ideal in ${estimate.nextIdealReleaseSeconds.toFixed(1)} s`;
   }
 
   private getAdmiralPortraitUrl(): string {
@@ -688,13 +797,29 @@ export class BeanstalkConductorGame {
     if (this.moneyVBucks < 2200 || this.message.includes('No usable') || this.message.includes('cannot launch')) {
       return admiralVossAlarmedUrl;
     }
-    if (this.message.includes('accepted') || this.message.includes('Source load complete')) {
+    if (this.message.includes('accepted') || this.message.includes('Source transfer complete')) {
       return admiralVossApprovalUrl;
     }
-    if (this.message.includes('Correction') || this.message.includes('Catch speed') || this.message.includes('Feed transfer')) {
+    if (this.message.includes('Correction') || this.message.includes('Catch speed')) {
       return admiralVossConcernUrl;
     }
     return admiralVossUrl;
+  }
+
+  private updateSpeedButtons(): void {
+    this.speedButtons.forEach(button => {
+      const selected = Number(button.dataset.beanstalkSpeed) === this.speedMultiplier;
+      button.classList.toggle('beanstalk-speed-button-selected', selected);
+      button.setAttribute('aria-pressed', String(selected));
+    });
+  }
+
+  private adjustSpeed(direction: -1 | 1): void {
+    const speeds = [1, 2, 4, 8, 16, 32];
+    const currentIndex = speeds.indexOf(this.speedMultiplier);
+    const nextIndex = Math.max(0, Math.min(speeds.length - 1, currentIndex + direction));
+    this.speedMultiplier = speeds[nextIndex] ?? 1;
+    this.updateSpeedButtons();
   }
 
   private awardFirstLaunch(): void {
@@ -751,22 +876,54 @@ function worldToCanvas(position: Vec2, center: Vec2, scale: number): Vec2 {
   };
 }
 
-function horizontalLaunchPath(source: Vec2, target: Vec2, progress: number): Vec2 {
-  const direction = target.x >= source.x ? 1 : -1;
-  const controlDistance = Math.max(35, Math.abs(target.x - source.x) * 0.35);
-  const controlA = { x: source.x + direction * controlDistance, y: source.y };
-  const controlB = { x: target.x - direction * controlDistance, y: target.y };
-  const inverse = 1 - progress;
-  const a = inverse * inverse * inverse;
-  const b = 3 * inverse * inverse * progress;
-  const c = 3 * inverse * progress * progress;
-  const d = progress * progress * progress;
-  return {
-    x: source.x * a + controlA.x * b + controlB.x * c + target.x * d,
-    y: source.y * a + controlA.y * b + controlB.y * c + target.y * d,
-  };
-}
-
 function imageIsReady(image: HTMLImageElement): boolean {
   return image.complete && image.naturalWidth > 0;
+}
+
+function formatSolveFailure(error: TransferSolveFailure): string {
+  const result = error.solveResult;
+  if (!result) {
+    return `Solver reason: ${error.reason}.`;
+  }
+  const parts = [
+    `Solver reason: ${error.reason}.`,
+    `Best release speed adjustment ${formatMaybeFinite(result.scalarCorrection)} m/s.`,
+  ];
+  if (result.scalarBounds) {
+    parts.push(`Allowed adjustment ${result.scalarBounds.low.toFixed(2)}..${result.scalarBounds.high.toFixed(2)} m/s.`);
+  }
+  if (result.boundEvaluations) {
+    parts.push(
+      `Altitude error at low bound ${formatMaybeFinite(result.boundEvaluations.low.altitudeError)}.`,
+      `Altitude error at high bound ${formatMaybeFinite(result.boundEvaluations.high.altitudeError)}.`,
+    );
+    if (!result.boundEvaluations.bracketsRoot) {
+      parts.push('No bisection: no continuous catching interval brackets zero altitude error.');
+    }
+  } else if (Number.isFinite(result.missDistance)) {
+    parts.push(`Best altitude error ${result.missDistance.toFixed(2)}.`);
+  }
+  if (result.iterations > 0) {
+    parts.push(`Bisection iterations ${result.iterations}.`);
+  }
+  return parts.join(' ');
+}
+
+function formatTimingEstimateForFailure(state: BeanstalkSystemState, target: TransferOpportunity): string {
+  const estimate = estimateTransferTiming(state, target);
+  if (!estimate) {
+    return 'Timing estimate: unsupported.';
+  }
+  if (!estimate.supported) {
+    return `Timing estimate: ${estimate.reason}.`;
+  }
+  return [
+    `Simple timing bar ${(estimate.quality * 100).toFixed(0)}%.`,
+    `Timing angle error ${estimate.phaseErrorRad.toFixed(3)} rad.`,
+    `Next simple ideal ${estimate.nextIdealReleaseSeconds.toFixed(1)} s.`,
+  ].join(' ');
+}
+
+function formatMaybeFinite(value: number): string {
+  return Number.isFinite(value) ? value.toFixed(2) : 'no angular crossing';
 }

@@ -239,10 +239,11 @@ function renderBeanstalkConductorMenu(): void {
       <div class="beanstalk-shell">
         <div class="beanstalk-game-stage beanstalk-screen-stage">
           <canvas id="beanstalkMenuArt" class="beanstalk-menu-art" width="1280" height="720" aria-hidden="true"></canvas>
-          <aside class="beanstalk-overlay beanstalk-menu-center-panel beanstalk-screen-panel" aria-label="Beanstalk Conductor menu">
-            <a class="eyebrow game-home-link" href="/gravity-games/">Gravity Games</a>
+          <aside class="beanstalk-menu-title" aria-label="Beanstalk Conductor menu">
             <h1><a class="game-title-link" href="#beanstalk-conductor-about">Beanstalk Conductor</a></h1>
-            <p class="page-copy">Public infrastructure, private timing decisions, and one increasingly concerned admiral.</p>
+            <p class="page-copy">Use arrow keys and space/enter to navigate.</p>
+          </aside>
+          <aside class="beanstalk-menu-choices" aria-label="Beanstalk Conductor choices">
             <nav class="beanstalk-menu-actions" aria-label="Beanstalk Conductor choices">
               <a class="index-link beanstalk-menu-choice" href="#beanstalk-conductor-backstory">
                 <strong>Back story ${backstoryDone ? '<span class="completion-mark">Done</span>' : ''}</strong>
@@ -255,6 +256,10 @@ function renderBeanstalkConductorMenu(): void {
               <a class="index-link beanstalk-menu-choice" href="#beanstalk-conductor-play">
                 <strong>Play</strong>
                 <span>Jump straight into live operations.</span>
+              </a>
+              <a class="index-link beanstalk-menu-choice" href="#beanstalk-conductor-about">
+                <strong>About</strong>
+                <span>Exit the game menu and open the about page.</span>
               </a>
             </nav>
           </aside>
@@ -313,23 +318,39 @@ function renderBeanstalkConductorPlay(): void {
         <div class="beanstalk-game-stage">
           <div id="beanstalkGameContainer" class="beanstalk-game-container" tabindex="0"></div>
           <aside class="beanstalk-overlay beanstalk-overlay-left" aria-label="Beanstalk Conductor status">
-            <a class="eyebrow game-home-link" href="/gravity-games/">Gravity Games</a>
-            <h1><a class="game-title-link" href="#beanstalk-conductor-about">Beanstalk Conductor</a></h1>
-            <dl class="beanstalk-status">
-              <div>
-                <dt>Money</dt>
-                <dd id="beanstalkStats">5000 vBucks | t=0.0 s</dd>
-              </div>
-              <div>
-                <dt>Selection</dt>
-                <dd id="beanstalkSelection">loading transfer options</dd>
-              </div>
-            </dl>
+            <div class="beanstalk-status" id="beanstalkStats">Money: 5000 vBucks
+Time: t=0.0 s</div>
+            <div class="beanstalk-status" id="beanstalkSelection">Selection: loading transfer options</div>
+            <div class="beanstalk-status beanstalk-timing" id="beanstalkTiming">Timing: --</div>
+          </aside>
+          <aside class="beanstalk-overlay beanstalk-transfer-banner" id="beanstalkTransferBanner" aria-live="polite" hidden>
+            Hold tight, transfer in progress.
+          </aside>
+          <aside class="beanstalk-overlay beanstalk-run-controls" aria-label="Run controls">
+            <button type="button" class="beanstalk-run-button" id="beanstalkResetButton">Reset</button>
+            <button type="button" class="beanstalk-run-button" id="beanstalkGiveUpButton">Give up</button>
+          </aside>
+          <aside class="beanstalk-overlay beanstalk-speed-controls" aria-label="Simulation speed">
+            <button type="button" class="beanstalk-speed-button" data-beanstalk-speed="1">1x</button>
+            <button type="button" class="beanstalk-speed-button" data-beanstalk-speed="2">2x</button>
+            <button type="button" class="beanstalk-speed-button" data-beanstalk-speed="4">4x</button>
+            <button type="button" class="beanstalk-speed-button" data-beanstalk-speed="8">8x</button>
+            <button type="button" class="beanstalk-speed-button" data-beanstalk-speed="16">16x</button>
+            <button type="button" class="beanstalk-speed-button" data-beanstalk-speed="32">32x</button>
           </aside>
           <aside class="beanstalk-overlay beanstalk-overlay-right" aria-label="Admiral Voss">
             <img class="beanstalk-admiral-portrait" id="beanstalkAdmiralPortrait" alt="" aria-hidden="true">
-            <strong>Admiral Voss</strong>
             <p id="beanstalkAdmiral">Awaiting first transfer.</p>
+          </aside>
+          <aside class="beanstalk-confirm" id="beanstalkGiveUpDialog" role="dialog" aria-modal="true" aria-labelledby="beanstalkGiveUpTitle" hidden>
+            <div class="beanstalk-confirm-panel">
+              <h2 id="beanstalkGiveUpTitle">Abandon run?</h2>
+              <p>This returns to the Beanstalk Conductor menu and abandons the current operating schedule.</p>
+              <div class="beanstalk-confirm-actions">
+                <button type="button" id="beanstalkConfirmGiveUp">Give up</button>
+                <button type="button" id="beanstalkCancelGiveUp">Continue</button>
+              </div>
+            </div>
           </aside>
         </div>
       </div>
@@ -338,7 +359,7 @@ function renderBeanstalkConductorPlay(): void {
         <h2 id="beanstalkControlsHeading">Controls</h2>
         <dl class="controls-list">
           <div>
-            <dt>Arrow keys</dt>
+            <dt>Up / Down</dt>
             <dd>Cycle available upmass and downmass timing opportunities</dd>
           </div>
           <div>
@@ -346,8 +367,12 @@ function renderBeanstalkConductorPlay(): void {
             <dd>Launch the selected transfer at the current time</dd>
           </div>
           <div>
-            <dt>Click</dt>
-            <dd>Launch the action for a visible source or occupied endpoint</dd>
+            <dt>W / S</dt>
+            <dd>Increase or decrease simulation speed</dd>
+          </div>
+          <div>
+            <dt>Esc</dt>
+            <dd>Open the abandon-run confirmation</dd>
           </div>
         </dl>
       </section>
@@ -361,8 +386,16 @@ function renderBeanstalkConductorPlay(): void {
     container,
     statsDisplay: document.querySelector<HTMLElement>('#beanstalkStats'),
     selectionDisplay: document.querySelector<HTMLElement>('#beanstalkSelection'),
+    timingDisplay: document.querySelector<HTMLElement>('#beanstalkTiming'),
     admiralDisplay: document.querySelector<HTMLElement>('#beanstalkAdmiral'),
     admiralPortraitDisplay: document.querySelector<HTMLImageElement>('#beanstalkAdmiralPortrait'),
+    transferBannerDisplay: document.querySelector<HTMLElement>('#beanstalkTransferBanner'),
+    resetButton: document.querySelector<HTMLButtonElement>('#beanstalkResetButton'),
+    giveUpButton: document.querySelector<HTMLButtonElement>('#beanstalkGiveUpButton'),
+    giveUpDialog: document.querySelector<HTMLElement>('#beanstalkGiveUpDialog'),
+    confirmGiveUpButton: document.querySelector<HTMLButtonElement>('#beanstalkConfirmGiveUp'),
+    cancelGiveUpButton: document.querySelector<HTMLButtonElement>('#beanstalkCancelGiveUp'),
+    speedButtons: [...document.querySelectorAll<HTMLButtonElement>('[data-beanstalk-speed]')],
     achievementNotifier: flashAchievement,
     achievementUnlocker: unlockBeanstalkAchievement,
   });
@@ -650,7 +683,7 @@ function drawBeanstalkMenuArtScene(
   if (images.barbellStage && imageIsReady(images.barbellStage)) {
     ctx.save();
     ctx.globalAlpha = 0.2;
-    ctx.drawImage(images.barbellStage, width * 0.48, height * 0.12, width * 0.34, height * 0.28);
+    ctx.drawImage(images.barbellStage, width * 0.36, height * 0.66, width * 0.28, height * 0.24);
     ctx.restore();
   }
 
@@ -713,27 +746,29 @@ function drawBeanstalkMenuArtScene(
     ctx.fill();
   }
 
+  const fleetX = 952;
+  const fleetY = 308;
   ctx.fillStyle = '#0f172a';
   ctx.strokeStyle = '#93c5fd';
   ctx.lineWidth = 4;
   if (images.fleetCentral && imageIsReady(images.fleetCentral)) {
-    ctx.drawImage(images.fleetCentral, 768, 54, 116, 116);
+    ctx.drawImage(images.fleetCentral, fleetX - 58, fleetY - 58, 116, 116);
   } else {
     ctx.beginPath();
-    ctx.rect(780, 82, 92, 52);
+    ctx.rect(fleetX - 46, fleetY - 26, 92, 52);
     ctx.fill();
     ctx.stroke();
     ctx.beginPath();
-    ctx.moveTo(742, 108);
-    ctx.lineTo(780, 108);
-    ctx.moveTo(872, 108);
-    ctx.lineTo(910, 108);
+    ctx.moveTo(fleetX - 84, fleetY);
+    ctx.lineTo(fleetX - 46, fleetY);
+    ctx.moveTo(fleetX + 46, fleetY);
+    ctx.lineTo(fleetX + 84, fleetY);
     ctx.stroke();
   }
   ctx.fillStyle = '#dbeafe';
   ctx.font = '700 20px system-ui, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('Fleet Central', 826, 66);
+  ctx.fillText('Fleet Central', fleetX, fleetY - 64);
 
   ctx.strokeStyle = 'rgba(234, 196, 96, 0.45)';
   ctx.lineWidth = 2;
@@ -741,7 +776,7 @@ function drawBeanstalkMenuArtScene(
   ctx.beginPath();
   ctx.moveTo(centerX + planetRadius + 40, centerY - 20);
   ctx.bezierCurveTo(360, 300, 480, 270, 560, 250);
-  ctx.bezierCurveTo(620, 225, 700, 175, 780, 108);
+  ctx.bezierCurveTo(660, 250, 790, 300, fleetX - 20, fleetY);
   ctx.stroke();
   ctx.setLineDash([]);
 }
